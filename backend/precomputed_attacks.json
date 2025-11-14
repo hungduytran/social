@@ -1,0 +1,594 @@
+{
+  "southeast-asia": {
+    "region": "southeast-asia",
+    "region_name": "Đông Nam Á",
+    "baseline": {
+      "nodes": 604,
+      "edges": 1144,
+      "lcc_norm": 0.5314569536423841,
+      "diameter": 7,
+      "aspl": 3.1403816199376946,
+      "components": 284
+    },
+    "k": 5,
+    "random": [
+      {
+        "step": 0,
+        "removed": 0,
+        "nodes": 604,
+        "edges": 1144,
+        "lcc_norm": 0.5314569536423841,
+        "diameter": 7,
+        "aspl": 3.1403816199376946,
+        "components": 284
+      },
+      {
+        "step": 1,
+        "removed": 1,
+        "fraction_removed": 0.0016556291390728477,
+        "nodes": 603,
+        "edges": 1140,
+        "lcc_norm": 0.5306799336650083,
+        "diameter": 7,
+        "aspl": 3.138891065830721,
+        "components": 284
+      },
+      {
+        "step": 2,
+        "removed": 2,
+        "fraction_removed": 0.0033112582781456954,
+        "nodes": 602,
+        "edges": 1137,
+        "lcc_norm": 0.5299003322259136,
+        "diameter": 7,
+        "aspl": 3.1360974744188796,
+        "components": 284
+      },
+      {
+        "step": 3,
+        "removed": 3,
+        "fraction_removed": 0.004966887417218543,
+        "nodes": 601,
+        "edges": 1137,
+        "lcc_norm": 0.5307820299500832,
+        "diameter": 7,
+        "aspl": 3.1360974744188796,
+        "components": 283
+      },
+      {
+        "step": 4,
+        "removed": 4,
+        "fraction_removed": 0.006622516556291391,
+        "nodes": 600,
+        "edges": 1137,
+        "lcc_norm": 0.5316666666666666,
+        "diameter": 7,
+        "aspl": 3.1360974744188796,
+        "components": 282
+      },
+      {
+        "step": 5,
+        "removed": 5,
+        "fraction_removed": 0.008278145695364239,
+        "nodes": 599,
+        "edges": 1137,
+        "lcc_norm": 0.5325542570951586,
+        "diameter": 7,
+        "aspl": 3.1360974744188796,
+        "components": 281
+      }
+    ],
+    "degree": [
+      {
+        "step": 0,
+        "removed": 0,
+        "nodes": 604,
+        "edges": 1144,
+        "lcc_norm": 0.5314569536423841,
+        "diameter": 7,
+        "aspl": 3.1403816199376946,
+        "components": 284
+      },
+      {
+        "step": 1,
+        "removed": 1,
+        "fraction_removed": 0.0016556291390728477,
+        "nodes": 603,
+        "edges": 1078,
+        "lcc_norm": 0.5290215588723052,
+        "diameter": 7,
+        "aspl": 3.189704461662822,
+        "components": 285
+      },
+      {
+        "step": 2,
+        "removed": 2,
+        "fraction_removed": 0.0033112582781456954,
+        "nodes": 602,
+        "edges": 1013,
+        "lcc_norm": 0.5282392026578073,
+        "diameter": 7,
+        "aspl": 3.2431006090907286,
+        "components": 285
+      },
+      {
+        "step": 3,
+        "removed": 3,
+        "fraction_removed": 0.004966887417218543,
+        "nodes": 601,
+        "edges": 955,
+        "lcc_norm": 0.5274542429284526,
+        "diameter": 8,
+        "aspl": 3.32807570977918,
+        "components": 285
+      },
+      {
+        "step": 4,
+        "removed": 4,
+        "fraction_removed": 0.006622516556291391,
+        "nodes": 600,
+        "edges": 900,
+        "lcc_norm": 0.52,
+        "diameter": 8,
+        "aspl": 3.354171819605903,
+        "components": 289
+      },
+      {
+        "step": 5,
+        "removed": 5,
+        "fraction_removed": 0.008278145695364239,
+        "nodes": 599,
+        "edges": 850,
+        "lcc_norm": 0.4974958263772955,
+        "diameter": 8,
+        "aspl": 3.4528958488690034,
+        "components": 302
+      }
+    ],
+    "betweenness": []
+  },
+  "asia": {
+    "region": "asia",
+    "region_name": "Châu Á",
+    "baseline": {
+      "nodes": 1266,
+      "edges": 3365,
+      "lcc_norm": 0.5260663507109005,
+      "diameter": 7,
+      "aspl": 3.1974982501298292,
+      "components": 600
+    },
+    "k": 5,
+    "random": [
+      {
+        "step": 0,
+        "removed": 0,
+        "nodes": 1266,
+        "edges": 3365,
+        "lcc_norm": 0.5260663507109005,
+        "diameter": 7,
+        "aspl": 3.1974982501298292,
+        "components": 600
+      },
+      {
+        "step": 1,
+        "removed": 1,
+        "fraction_removed": 0.0007898894154818325,
+        "nodes": 1265,
+        "edges": 3365,
+        "lcc_norm": 0.5264822134387351,
+        "diameter": 7,
+        "aspl": 3.1974982501298292,
+        "components": 599
+      },
+      {
+        "step": 2,
+        "removed": 2,
+        "fraction_removed": 0.001579778830963665,
+        "nodes": 1264,
+        "edges": 3362,
+        "lcc_norm": 0.5261075949367089,
+        "diameter": 7,
+        "aspl": 3.197268774345502,
+        "components": 599
+      },
+      {
+        "step": 3,
+        "removed": 3,
+        "fraction_removed": 0.002369668246445498,
+        "nodes": 1263,
+        "edges": 3265,
+        "lcc_norm": 0.5249406175771971,
+        "diameter": 7,
+        "aspl": 3.2104960971141883,
+        "components": 600
+      },
+      {
+        "step": 4,
+        "removed": 4,
+        "fraction_removed": 0.00315955766192733,
+        "nodes": 1262,
+        "edges": 3258,
+        "lcc_norm": 0.5245641838351822,
+        "diameter": 7,
+        "aspl": 3.211704320561632,
+        "components": 600
+      },
+      {
+        "step": 5,
+        "removed": 5,
+        "fraction_removed": 0.0039494470774091624,
+        "nodes": 1261,
+        "edges": 3257,
+        "lcc_norm": 0.5241871530531325,
+        "diameter": 7,
+        "aspl": 3.210810067391005,
+        "components": 600
+      }
+    ],
+    "degree": [
+      {
+        "step": 0,
+        "removed": 0,
+        "nodes": 1266,
+        "edges": 3365,
+        "lcc_norm": 0.5260663507109005,
+        "diameter": 7,
+        "aspl": 3.1974982501298292,
+        "components": 600
+      },
+      {
+        "step": 1,
+        "removed": 1,
+        "fraction_removed": 0.0007898894154818325,
+        "nodes": 1265,
+        "edges": 3212,
+        "lcc_norm": 0.525691699604743,
+        "diameter": 7,
+        "aspl": 3.2497418244406195,
+        "components": 600
+      },
+      {
+        "step": 2,
+        "removed": 2,
+        "fraction_removed": 0.001579778830963665,
+        "nodes": 1264,
+        "edges": 3087,
+        "lcc_norm": 0.5253164556962026,
+        "diameter": 7,
+        "aspl": 3.2707072634429117,
+        "components": 600
+      },
+      {
+        "step": 3,
+        "removed": 3,
+        "fraction_removed": 0.002369668246445498,
+        "nodes": 1263,
+        "edges": 2969,
+        "lcc_norm": 0.5233570863024545,
+        "diameter": 7,
+        "aspl": 3.3021363407142528,
+        "components": 602
+      },
+      {
+        "step": 4,
+        "removed": 4,
+        "fraction_removed": 0.00315955766192733,
+        "nodes": 1262,
+        "edges": 2871,
+        "lcc_norm": 0.5213946117274167,
+        "diameter": 7,
+        "aspl": 3.328989188213904,
+        "components": 604
+      },
+      {
+        "step": 5,
+        "removed": 5,
+        "fraction_removed": 0.0039494470774091624,
+        "nodes": 1261,
+        "edges": 2778,
+        "lcc_norm": 0.5202220459952419,
+        "diameter": 7,
+        "aspl": 3.3519223608266615,
+        "components": 605
+      }
+    ],
+    "betweenness": []
+  },
+  "europe": {
+    "region": "europe",
+    "region_name": "Châu Âu",
+    "baseline": {
+      "nodes": 1602,
+      "edges": 5230,
+      "lcc_norm": 0.3358302122347066,
+      "diameter": 6,
+      "aspl": 2.7310890047281813,
+      "components": 1064
+    },
+    "k": 5,
+    "random": [
+      {
+        "step": 0,
+        "removed": 0,
+        "nodes": 1602,
+        "edges": 5230,
+        "lcc_norm": 0.3358302122347066,
+        "diameter": 6,
+        "aspl": 2.7310890047281813,
+        "components": 1064
+      },
+      {
+        "step": 1,
+        "removed": 1,
+        "fraction_removed": 0.0006242197253433209,
+        "nodes": 1601,
+        "edges": 5230,
+        "lcc_norm": 0.3360399750156152,
+        "diameter": 6,
+        "aspl": 2.7310890047281813,
+        "components": 1063
+      },
+      {
+        "step": 2,
+        "removed": 2,
+        "fraction_removed": 0.0012484394506866417,
+        "nodes": 1600,
+        "edges": 5230,
+        "lcc_norm": 0.33625,
+        "diameter": 6,
+        "aspl": 2.7310890047281813,
+        "components": 1062
+      },
+      {
+        "step": 3,
+        "removed": 3,
+        "fraction_removed": 0.0018726591760299626,
+        "nodes": 1599,
+        "edges": 5230,
+        "lcc_norm": 0.33646028767979985,
+        "diameter": 6,
+        "aspl": 2.7310890047281813,
+        "components": 1061
+      },
+      {
+        "step": 4,
+        "removed": 4,
+        "fraction_removed": 0.0024968789013732834,
+        "nodes": 1598,
+        "edges": 5230,
+        "lcc_norm": 0.33667083854818525,
+        "diameter": 6,
+        "aspl": 2.7310890047281813,
+        "components": 1060
+      },
+      {
+        "step": 5,
+        "removed": 5,
+        "fraction_removed": 0.003121098626716604,
+        "nodes": 1597,
+        "edges": 5230,
+        "lcc_norm": 0.3368816530995617,
+        "diameter": 6,
+        "aspl": 2.7310890047281813,
+        "components": 1059
+      }
+    ],
+    "degree": [
+      {
+        "step": 0,
+        "removed": 0,
+        "nodes": 1602,
+        "edges": 5230,
+        "lcc_norm": 0.3358302122347066,
+        "diameter": 6,
+        "aspl": 2.7310890047281813,
+        "components": 1064
+      },
+      {
+        "step": 1,
+        "removed": 1,
+        "fraction_removed": 0.0006242197253433209,
+        "nodes": 1601,
+        "edges": 5081,
+        "lcc_norm": 0.3354153653966271,
+        "diameter": 6,
+        "aspl": 2.744413407821229,
+        "components": 1064
+      },
+      {
+        "step": 2,
+        "removed": 2,
+        "fraction_removed": 0.0012484394506866417,
+        "nodes": 1600,
+        "edges": 4938,
+        "lcc_norm": 0.33375,
+        "diameter": 6,
+        "aspl": 2.7616558101622504,
+        "components": 1066
+      },
+      {
+        "step": 3,
+        "removed": 3,
+        "fraction_removed": 0.0018726591760299626,
+        "nodes": 1599,
+        "edges": 4803,
+        "lcc_norm": 0.3333333333333333,
+        "diameter": 6,
+        "aspl": 2.770056003047017,
+        "components": 1066
+      },
+      {
+        "step": 4,
+        "removed": 4,
+        "fraction_removed": 0.0024968789013732834,
+        "nodes": 1598,
+        "edges": 4671,
+        "lcc_norm": 0.3310387984981227,
+        "diameter": 6,
+        "aspl": 2.776343300681675,
+        "components": 1069
+      },
+      {
+        "step": 5,
+        "removed": 5,
+        "fraction_removed": 0.003121098626716604,
+        "nodes": 1597,
+        "edges": 4549,
+        "lcc_norm": 0.3306199123356293,
+        "diameter": 6,
+        "aspl": 2.7883316083031455,
+        "components": 1069
+      }
+    ],
+    "betweenness": []
+  },
+  "north-america": {
+    "region": "north-america",
+    "region_name": "Bắc Mỹ",
+    "baseline": {
+      "nodes": 2205,
+      "edges": 4113,
+      "lcc_norm": 0.39365079365079364,
+      "diameter": 12,
+      "aspl": 3.632000807913298,
+      "components": 1325
+    },
+    "k": 5,
+    "random": [
+      {
+        "step": 0,
+        "removed": 0,
+        "nodes": 2205,
+        "edges": 4113,
+        "lcc_norm": 0.39365079365079364,
+        "diameter": 12,
+        "aspl": 3.632000807913298,
+        "components": 1325
+      },
+      {
+        "step": 1,
+        "removed": 1,
+        "fraction_removed": 0.00045351473922902497,
+        "nodes": 2204,
+        "edges": 4112,
+        "lcc_norm": 0.3933756805807623,
+        "diameter": 12,
+        "aspl": 3.6327598285612304,
+        "components": 1325
+      },
+      {
+        "step": 2,
+        "removed": 2,
+        "fraction_removed": 0.0009070294784580499,
+        "nodes": 2203,
+        "edges": 4112,
+        "lcc_norm": 0.39355424421243757,
+        "diameter": 12,
+        "aspl": 3.6327598285612304,
+        "components": 1324
+      },
+      {
+        "step": 3,
+        "removed": 3,
+        "fraction_removed": 0.0013605442176870747,
+        "nodes": 2202,
+        "edges": 4112,
+        "lcc_norm": 0.39373297002724794,
+        "diameter": 12,
+        "aspl": 3.6327598285612304,
+        "components": 1323
+      },
+      {
+        "step": 4,
+        "removed": 4,
+        "fraction_removed": 0.0018140589569160999,
+        "nodes": 2201,
+        "edges": 4112,
+        "lcc_norm": 0.3939118582462517,
+        "diameter": 12,
+        "aspl": 3.6327598285612304,
+        "components": 1322
+      },
+      {
+        "step": 5,
+        "removed": 5,
+        "fraction_removed": 0.0022675736961451248,
+        "nodes": 2200,
+        "edges": 4112,
+        "lcc_norm": 0.3940909090909091,
+        "diameter": 12,
+        "aspl": 3.6327598285612304,
+        "components": 1321
+      }
+    ],
+    "degree": [
+      {
+        "step": 0,
+        "removed": 0,
+        "nodes": 2205,
+        "edges": 4113,
+        "lcc_norm": 0.39365079365079364,
+        "diameter": 12,
+        "aspl": 3.632000807913298,
+        "components": 1325
+      },
+      {
+        "step": 1,
+        "removed": 1,
+        "fraction_removed": 0.00045351473922902497,
+        "nodes": 2204,
+        "edges": 3933,
+        "lcc_norm": 0.38838475499092556,
+        "diameter": 12,
+        "aspl": 3.6443788599223916,
+        "components": 1335
+      },
+      {
+        "step": 2,
+        "removed": 2,
+        "fraction_removed": 0.0009070294784580499,
+        "nodes": 2203,
+        "edges": 3759,
+        "lcc_norm": 0.38447571493418065,
+        "diameter": 12,
+        "aspl": 3.698351294095975,
+        "components": 1343
+      },
+      {
+        "step": 3,
+        "removed": 3,
+        "fraction_removed": 0.0013605442176870747,
+        "nodes": 2202,
+        "edges": 3595,
+        "lcc_norm": 0.3773841961852861,
+        "diameter": 12,
+        "aspl": 3.722737882939701,
+        "components": 1358
+      },
+      {
+        "step": 4,
+        "removed": 4,
+        "fraction_removed": 0.0018140589569160999,
+        "nodes": 2201,
+        "edges": 3435,
+        "lcc_norm": 0.3689232167196729,
+        "diameter": 12,
+        "aspl": 3.7712821852241047,
+        "components": 1373
+      },
+      {
+        "step": 5,
+        "removed": 5,
+        "fraction_removed": 0.0022675736961451248,
+        "nodes": 2200,
+        "edges": 3299,
+        "lcc_norm": 0.3640909090909091,
+        "diameter": 12,
+        "aspl": 3.7980898876404496,
+        "components": 1383
+      }
+    ],
+    "betweenness": []
+  }
+}

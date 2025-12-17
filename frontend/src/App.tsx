@@ -100,6 +100,9 @@ function App() {
   // Overview / report panel
   const [showOverview, setShowOverview] = useState<boolean>(false)
   
+  // Chart zoom modal
+  const [zoomedChart, setZoomedChart] = useState<{ title: string; data: any; config: any } | null>(null)
+  
   // Attack strategy parameters
   const [attackStrategy, setAttackStrategy] = useState<string>('degree_targeted_attack')
   const [maxFraction, setMaxFraction] = useState<number>(0.5)
@@ -501,10 +504,10 @@ function App() {
   function ZoomTracker({ onZoomChange }: { onZoomChange: (zoom: number) => void }) {
     const map = useMap()
     useEffect(() => {
-      let timeoutId: NodeJS.Timeout
+      let timeoutId: number
       const updateZoom = () => {
         clearTimeout(timeoutId)
-        timeoutId = setTimeout(() => {
+        timeoutId = window.setTimeout(() => {
           onZoomChange(map.getZoom())
         }, 100) // Debounce 100ms
       }
@@ -809,23 +812,6 @@ function App() {
           <div style={{ marginBottom: '15px' }}>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#0066cc' }}>Quick Analysis</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-              <button
-                onClick={() => runAttackAnalysis()}
-                disabled={loadingAnalysis}
-                style={{
-                  padding: '10px',
-                  background: '#ff6600',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: loadingAnalysis ? 'not-allowed' : 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                }}
-              >
-                {loadingAnalysis ? '...' : '3 Strategies'}
-              </button>
               <button
                 onClick={() => runTopKImpactAnalysis()}
                 disabled={loadingAnalysis}
@@ -1181,20 +1167,50 @@ function App() {
               
               {robustnessCurves.baseline && (
                 <div style={{ 
-                  fontSize: '12px', 
-                  color: '#666', 
-                  marginBottom: '20px', 
-                  padding: '12px', 
-                  background: 'white',
-                  borderRadius: '8px',
-                  border: '1px solid #e0e0e0',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '15px',
+                  marginBottom: '20px'
                 }}>
-                  <strong style={{ color: '#0066cc' }}>Baseline Metrics:</strong><br/>
-                  Nodes: {robustnessCurves.baseline.nodes} | 
-                  Edges: {robustnessCurves.baseline.edges} | 
-                  LCC: {robustnessCurves.baseline.lcc_norm?.toFixed(3)} | 
-                  Diameter: {robustnessCurves.baseline.diameter?.toFixed(1)}
+                  {/* LCC Table */}
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#666', 
+                    padding: '12px', 
+                    background: 'white',
+                    borderRadius: '8px',
+                    border: '1px solid #e0e0e0',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                  }}>
+                    <strong style={{ color: '#0066cc', fontSize: '13px' }}>📊 LCC Metrics</strong><br/>
+                    <div style={{ marginTop: '8px' }}>
+                      <div>Nodes: <strong>{robustnessCurves.baseline.nodes}</strong></div>
+                      <div>Edges: <strong>{robustnessCurves.baseline.edges}</strong></div>
+                      <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #eee' }}>
+                        LCC Size: <strong style={{ color: '#0066cc', fontSize: '14px' }}>{robustnessCurves.baseline.lcc_norm?.toFixed(3)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Diameter Table */}
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#666', 
+                    padding: '12px', 
+                    background: 'white',
+                    borderRadius: '8px',
+                    border: '1px solid #e0e0e0',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                  }}>
+                    <strong style={{ color: '#0066cc', fontSize: '13px' }}>📏 Diameter Metrics</strong><br/>
+                    <div style={{ marginTop: '8px' }}>
+                      <div>Nodes: <strong>{robustnessCurves.baseline.nodes}</strong></div>
+                      <div>Edges: <strong>{robustnessCurves.baseline.edges}</strong></div>
+                      <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #eee' }}>
+                        Diameter: <strong style={{ color: '#ff6600', fontSize: '14px' }}>{robustnessCurves.baseline.diameter?.toFixed(1)}</strong>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1211,27 +1227,53 @@ function App() {
                   <h4 style={{ margin: '0 0 15px 0', fontSize: '15px', fontWeight: 'bold', color: '#0066cc' }}>
                     📈 Fraction Removed vs Relative LCC Size
                   </h4>
-                  <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
-                  fraction: f,
-                  'Random Attack': robustnessCurves.random_attack.relative_lcc_size[i],
-                  'Degree Targeted': robustnessCurves.degree_targeted_attack?.relative_lcc_size[i] || null,
-                  'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.relative_lcc_size[i] || null
-                }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
-                  <YAxis label={{ value: 'Relative LCC Size', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="Random Attack" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Degree Targeted" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
-                  {robustnessCurves.betweenness_targeted_attack && (
-                    <Line type="monotone" dataKey="Betweenness Targeted" stroke="#ff7300" strokeWidth={2} dot={{ r: 3 }} />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+                  <div 
+                    onClick={() => setZoomedChart({
+                      title: 'Fraction Removed vs Relative LCC Size',
+                      data: robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
+                        fraction: f,
+                        'Random Attack': robustnessCurves.random_attack.relative_lcc_size[i],
+                        'Degree Targeted': robustnessCurves.degree_targeted_attack?.relative_lcc_size[i] || null,
+                        'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.relative_lcc_size[i] || null
+                      })),
+                      config: {
+                        xKey: 'fraction',
+                        xLabel: 'Fraction Removed',
+                        yLabel: 'Relative LCC Size',
+                        lines: [
+                          { key: 'Random Attack', stroke: '#8884d8' },
+                          { key: 'Degree Targeted', stroke: '#82ca9d' },
+                          { key: 'Betweenness Targeted', stroke: '#ff7300' }
+                        ]
+                      }
+                    })}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart data={robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
+                        fraction: f,
+                        'Random Attack': robustnessCurves.random_attack.relative_lcc_size[i],
+                        'Degree Targeted': robustnessCurves.degree_targeted_attack?.relative_lcc_size[i] || null,
+                        'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.relative_lcc_size[i] || null
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
+                        <YAxis label={{ value: 'Relative LCC Size', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="Random Attack" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="Degree Targeted" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
+                        {robustnessCurves.betweenness_targeted_attack && (
+                          <Line type="monotone" dataKey="Betweenness Targeted" stroke="#ff7300" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                    Click để phóng to
+                  </div>
+                </div>
+              )}
 
               {/* Chart 2: Fraction Removed vs Diameter */}
               {robustnessCurves.random_attack && (
@@ -1246,27 +1288,53 @@ function App() {
                   <h4 style={{ margin: '0 0 15px 0', fontSize: '15px', fontWeight: 'bold', color: '#0066cc' }}>
                     📉 Fraction Removed vs Diameter
                   </h4>
-                  <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
-                  fraction: f,
-                  'Random Attack': robustnessCurves.random_attack.diameter[i],
-                  'Degree Targeted': robustnessCurves.degree_targeted_attack?.diameter[i] || null,
-                  'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.diameter[i] || null
-                }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
-                  <YAxis label={{ value: 'Diameter', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="Random Attack" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Degree Targeted" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
-                  {robustnessCurves.betweenness_targeted_attack && (
-                    <Line type="monotone" dataKey="Betweenness Targeted" stroke="#ff7300" strokeWidth={2} dot={{ r: 3 }} />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+                  <div 
+                    onClick={() => setZoomedChart({
+                      title: 'Fraction Removed vs Diameter',
+                      data: robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
+                        fraction: f,
+                        'Random Attack': robustnessCurves.random_attack.diameter[i],
+                        'Degree Targeted': robustnessCurves.degree_targeted_attack?.diameter[i] || null,
+                        'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.diameter[i] || null
+                      })),
+                      config: {
+                        xKey: 'fraction',
+                        xLabel: 'Fraction Removed',
+                        yLabel: 'Diameter',
+                        lines: [
+                          { key: 'Random Attack', stroke: '#8884d8' },
+                          { key: 'Degree Targeted', stroke: '#82ca9d' },
+                          { key: 'Betweenness Targeted', stroke: '#ff7300' }
+                        ]
+                      }
+                    })}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart data={robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
+                        fraction: f,
+                        'Random Attack': robustnessCurves.random_attack.diameter[i],
+                        'Degree Targeted': robustnessCurves.degree_targeted_attack?.diameter[i] || null,
+                        'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.diameter[i] || null
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
+                        <YAxis label={{ value: 'Diameter', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="Random Attack" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="Degree Targeted" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
+                        {robustnessCurves.betweenness_targeted_attack && (
+                          <Line type="monotone" dataKey="Betweenness Targeted" stroke="#ff7300" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                    Click để phóng to
+                  </div>
+                </div>
+              )}
 
               {/* Defense comparison if available */}
               {robustnessCurves.degree_attack_original && (
@@ -1293,23 +1361,47 @@ function App() {
                     <div><strong>Original:</strong> {robustnessCurves.baseline_original?.edges} edges</div>
                     <div><strong>Reinforced:</strong> {robustnessCurves.baseline_reinforced?.edges} edges (+{robustnessCurves.baseline_reinforced?.edges - robustnessCurves.baseline_original?.edges} backup edges)</div>
                   </div>
-                  <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={robustnessCurves.degree_attack_original.fraction_removed.map((f: number, i: number) => ({
-                  fraction: f,
-                  'Original (Degree Attack)': robustnessCurves.degree_attack_original.relative_lcc_size[i],
-                  'Reinforced (Degree Attack)': robustnessCurves.degree_attack_reinforced?.relative_lcc_size[i] || null
-                }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
-                  <YAxis label={{ value: 'Relative LCC Size', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="Original (Degree Attack)" stroke="#ff0000" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Reinforced (Degree Attack)" stroke="#00cc00" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+                  <div 
+                    onClick={() => setZoomedChart({
+                      title: 'Defense: Reinforced vs Original',
+                      data: robustnessCurves.degree_attack_original.fraction_removed.map((f: number, i: number) => ({
+                        fraction: f,
+                        'Original (Degree Attack)': robustnessCurves.degree_attack_original.relative_lcc_size[i],
+                        'Reinforced (Degree Attack)': robustnessCurves.degree_attack_reinforced?.relative_lcc_size[i] || null
+                      })),
+                      config: {
+                        xKey: 'fraction',
+                        xLabel: 'Fraction Removed',
+                        yLabel: 'Relative LCC Size',
+                        lines: [
+                          { key: 'Original (Degree Attack)', stroke: '#ff0000' },
+                          { key: 'Reinforced (Degree Attack)', stroke: '#00cc00' }
+                        ]
+                      }
+                    })}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart data={robustnessCurves.degree_attack_original.fraction_removed.map((f: number, i: number) => ({
+                        fraction: f,
+                        'Original (Degree Attack)': robustnessCurves.degree_attack_original.relative_lcc_size[i],
+                        'Reinforced (Degree Attack)': robustnessCurves.degree_attack_reinforced?.relative_lcc_size[i] || null
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
+                        <YAxis label={{ value: 'Relative LCC Size', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="Original (Degree Attack)" stroke="#ff0000" strokeWidth={2} dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="Reinforced (Degree Attack)" stroke="#00cc00" strokeWidth={2} dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                    Click để phóng to
+                  </div>
+                </div>
+              )}
 
               {/* Custom defense comparison */}
               {robustnessCurves.attack_original && (
@@ -1337,79 +1429,186 @@ function App() {
                     <div><strong>Reinforced:</strong> {robustnessCurves.baseline_reinforced?.edges} edges (+{robustnessCurves.added_edges} backup)</div>
                     <div><strong>Configuration:</strong> Top-{robustnessCurves.k_hubs} hubs, Max distance: {robustnessCurves.max_distance_km}km</div>
                   </div>
-                  <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={robustnessCurves.attack_original.fraction_removed.map((f: number, i: number) => ({
-                  fraction: f,
-                  'Original': robustnessCurves.attack_original.relative_lcc_size[i],
-                  'Reinforced': robustnessCurves.attack_reinforced?.relative_lcc_size[i] || null
-                }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
-                  <YAxis label={{ value: 'Relative LCC Size', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="Original" stroke="#ff0000" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Reinforced" stroke="#00cc00" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+                  <div 
+                    onClick={() => setZoomedChart({
+                      title: `Custom Defense: ${robustnessCurves.attack_strategy?.replace('_', ' ').replace('attack', '').trim()}`,
+                      data: robustnessCurves.attack_original.fraction_removed.map((f: number, i: number) => ({
+                        fraction: f,
+                        'Original': robustnessCurves.attack_original.relative_lcc_size[i],
+                        'Reinforced': robustnessCurves.attack_reinforced?.relative_lcc_size[i] || null
+                      })),
+                      config: {
+                        xKey: 'fraction',
+                        xLabel: 'Fraction Removed',
+                        yLabel: 'Relative LCC Size',
+                        lines: [
+                          { key: 'Original', stroke: '#ff0000' },
+                          { key: 'Reinforced', stroke: '#00cc00' }
+                        ]
+                      }
+                    })}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart data={robustnessCurves.attack_original.fraction_removed.map((f: number, i: number) => ({
+                        fraction: f,
+                        'Original': robustnessCurves.attack_original.relative_lcc_size[i],
+                        'Reinforced': robustnessCurves.attack_reinforced?.relative_lcc_size[i] || null
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
+                        <YAxis label={{ value: 'Relative LCC Size', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="Original" stroke="#ff0000" strokeWidth={2} dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="Reinforced" stroke="#00cc00" strokeWidth={2} dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                    Click để phóng to
+                  </div>
+                </div>
+              )}
 
               {/* Top-K Impact Analysis */}
               {topKImpact && (
-                <div style={{ 
-                  marginTop: '30px',
-                  marginBottom: '30px',
-                  padding: '15px',
-                  background: 'white',
-                  borderRadius: '8px',
-                  border: '2px solid #cc0066',
-                  boxShadow: '0 2px 6px rgba(204,0,102,0.15)'
-                }}>
-                  <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 'bold', color: '#cc0066' }}>
-                    🎯 Top-{topKImpact.k} Hubs Impact ({topKImpact.strategy})
-                  </h4>
+                <>
+                  {/* Top Hubs Info */}
                   <div style={{ 
-                    fontSize: '12px', 
-                    color: '#666', 
-                    marginBottom: '15px', 
-                    maxHeight: '120px', 
-                    overflowY: 'auto', 
-                    padding: '12px', 
-                    background: '#fff5f8',
-                    borderRadius: '6px',
-                    border: '1px solid #ffe0e8'
+                    marginTop: '30px',
+                    marginBottom: '20px',
+                    padding: '15px',
+                    background: 'white',
+                    borderRadius: '8px',
+                    border: '2px solid #cc0066',
+                    boxShadow: '0 2px 6px rgba(204,0,102,0.15)'
                   }}>
-                    <strong style={{ color: '#cc0066' }}>Top Hubs:</strong>
-                    {topKImpact.hubs?.slice(0, 5).map((hub: any, idx: number) => (
-                      <div key={idx} style={{ marginTop: '5px', paddingLeft: '5px' }}>
-                        <span style={{ fontWeight: 'bold', color: '#cc0066' }}>{idx + 1}.</span> {hub.name} ({hub.iata}) - {hub.city}
-                      </div>
-                    ))}
-                    {topKImpact.hubs?.length > 5 && (
-                      <div style={{ marginTop: '5px', fontStyle: 'italic', color: '#999', paddingLeft: '5px' }}>
-                        ... and {topKImpact.hubs.length - 5} more hubs
-                      </div>
-                    )}
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 'bold', color: '#cc0066' }}>
+                      🎯 Top-{topKImpact.k} Hubs Impact ({topKImpact.strategy})
+                    </h4>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#666', 
+                      maxHeight: '120px', 
+                      overflowY: 'auto', 
+                      padding: '12px', 
+                      background: '#fff5f8',
+                      borderRadius: '6px',
+                      border: '1px solid #ffe0e8'
+                    }}>
+                      <strong style={{ color: '#cc0066' }}>Top Hubs:</strong>
+                      {topKImpact.hubs?.slice(0, 5).map((hub: any, idx: number) => (
+                        <div key={idx} style={{ marginTop: '5px', paddingLeft: '5px' }}>
+                          <span style={{ fontWeight: 'bold', color: '#cc0066' }}>{idx + 1}.</span> {hub.name} ({hub.iata}) - {hub.city}
+                        </div>
+                      ))}
+                      {topKImpact.hubs?.length > 5 && (
+                        <div style={{ marginTop: '5px', fontStyle: 'italic', color: '#999', paddingLeft: '5px' }}>
+                          ... and {topKImpact.hubs.length - 5} more hubs
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={topKImpact.impact_curve.map((point: any) => ({
-                  step: point.step,
-                  'LCC Size': point.lcc_norm,
-                  'Diameter': point.diameter / 10, // Scale for visibility
-                  'ASPL': point.aspl / 10 // Scale for visibility
-                }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="step" label={{ value: 'Hubs Removed', position: 'insideBottom', offset: -5 }} />
-                  <YAxis label={{ value: 'Metrics (scaled)', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="LCC Size" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Diameter" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="ASPL" stroke="#ff7300" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+
+                  {/* Chart 1: LCC Size */}
+                  <div style={{ 
+                    marginBottom: '30px',
+                    padding: '15px',
+                    background: 'white',
+                    borderRadius: '8px',
+                    border: '1px solid #e0e0e0',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.08)'
+                  }}>
+                    <h4 style={{ margin: '0 0 15px 0', fontSize: '15px', fontWeight: 'bold', color: '#0066cc' }}>
+                      📊 Top-{topKImpact.k} Hubs Impact: LCC Size
+                    </h4>
+                    <div 
+                      onClick={() => setZoomedChart({
+                        title: `Top-${topKImpact.k} Hubs Impact - LCC Size (${topKImpact.strategy})`,
+                        data: topKImpact.impact_curve.map((point: any) => ({
+                          step: point.step,
+                          'LCC Size': point.lcc_norm
+                        })),
+                        config: {
+                          xKey: 'step',
+                          xLabel: 'Hubs Removed',
+                          yLabel: 'LCC Size (normalized)',
+                          lines: [
+                            { key: 'LCC Size', stroke: '#8884d8' }
+                          ]
+                        }
+                      })}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <ResponsiveContainer width="100%" height={280}>
+                        <LineChart data={topKImpact.impact_curve.map((point: any) => ({
+                          step: point.step,
+                          'LCC Size': point.lcc_norm
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="step" label={{ value: 'Hubs Removed', position: 'insideBottom', offset: -5 }} />
+                          <YAxis label={{ value: 'LCC Size (normalized)', angle: -90, position: 'insideLeft' }} />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="LCC Size" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                      Click để phóng to
+                    </div>
+                  </div>
+
+                  {/* Chart 2: Diameter */}
+                  <div style={{ 
+                    marginBottom: '30px',
+                    padding: '15px',
+                    background: 'white',
+                    borderRadius: '8px',
+                    border: '1px solid #e0e0e0',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.08)'
+                  }}>
+                    <h4 style={{ margin: '0 0 15px 0', fontSize: '15px', fontWeight: 'bold', color: '#0066cc' }}>
+                      📉 Top-{topKImpact.k} Hubs Impact: Diameter
+                    </h4>
+                    <div 
+                      onClick={() => setZoomedChart({
+                        title: `Top-${topKImpact.k} Hubs Impact - Diameter (${topKImpact.strategy})`,
+                        data: topKImpact.impact_curve.map((point: any) => ({
+                          step: point.step,
+                          'Diameter': point.diameter
+                        })),
+                        config: {
+                          xKey: 'step',
+                          xLabel: 'Hubs Removed',
+                          yLabel: 'Diameter',
+                          lines: [
+                            { key: 'Diameter', stroke: '#82ca9d' }
+                          ]
+                        }
+                      })}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <ResponsiveContainer width="100%" height={280}>
+                        <LineChart data={topKImpact.impact_curve.map((point: any) => ({
+                          step: point.step,
+                          'Diameter': point.diameter
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="step" label={{ value: 'Hubs Removed', position: 'insideBottom', offset: -5 }} />
+                          <YAxis label={{ value: 'Diameter', angle: -90, position: 'insideLeft' }} />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="Diameter" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                      Click để phóng to
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -1763,6 +1962,84 @@ function App() {
         >
           Removed ({removedItems.length})
         </button>
+      )}
+
+      {/* Chart Zoom Modal */}
+      {zoomedChart && (
+        <div
+          onClick={() => setZoomedChart(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 5000,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            cursor: 'pointer'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: '10px',
+              padding: '25px',
+              width: '90vw',
+              maxWidth: '1200px',
+              maxHeight: '90vh',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+              cursor: 'default'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#0066cc' }}>
+                {zoomedChart.title}
+              </h3>
+              <button
+                onClick={() => setZoomedChart(null)}
+                style={{
+                  background: '#f0f0f0',
+                  border: '1px solid #ccc',
+                  borderRadius: '5px',
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                ✕ Close
+              </button>
+            </div>
+            <ResponsiveContainer width="100%" height={600}>
+              <LineChart data={zoomedChart.data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey={zoomedChart.config.xKey} 
+                  label={{ value: zoomedChart.config.xLabel, position: 'insideBottom', offset: -5 }} 
+                />
+                <YAxis 
+                  label={{ value: zoomedChart.config.yLabel, angle: -90, position: 'insideLeft' }} 
+                />
+                <Tooltip />
+                <Legend />
+                {zoomedChart.config.lines.map((line: any) => (
+                  <Line 
+                    key={line.key}
+                    type="monotone" 
+                    dataKey={line.key} 
+                    stroke={line.stroke} 
+                    strokeWidth={3} 
+                    dot={{ r: 4 }} 
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       )}
     </div>
   )

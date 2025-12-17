@@ -29,13 +29,37 @@ const API = axios.create({
   timeout: 120000 // 2 minutes for analysis operations
 })
 
-// Chỉ focus vào Đông Nam Á
+// Các khu vực phân tích chính + Global (bbox chỉ dùng cho filter ở backend)
 const REGIONS = {
+  'global': {
+    name: 'Toàn thế giới',
+    bbox: null as any,
+    center: [20, 0] as [number, number],
+    zoom: 2
+  },
   'southeast-asia': {
     name: 'Đông Nam Á',
     bbox: { minLat: -10, maxLat: 30, minLon: 90, maxLon: 150 },
     center: [10, 120] as [number, number],
     zoom: 5
+  },
+  'europe': {
+    name: 'Châu Âu',
+    bbox: { minLat: 35, maxLat: 72, minLon: -15, maxLon: 40 },
+    center: [52, 10] as [number, number],
+    zoom: 4
+  },
+  'asia': {
+    name: 'Châu Á',
+    bbox: { minLat: -10, maxLat: 55, minLon: 60, maxLon: 150 },
+    center: [30, 100] as [number, number],
+    zoom: 3
+  },
+  'north-america': {
+    name: 'Bắc Mỹ',
+    bbox: { minLat: 15, maxLat: 72, minLon: -170, maxLon: -50 },
+    center: [40, -100] as [number, number],
+    zoom: 3
   }
 }
 
@@ -61,6 +85,20 @@ function App() {
   const [redundancySuggestions, setRedundancySuggestions] = useState<any[]>([])
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [mapKey, setMapKey] = useState(0) // Force re-render map
+
+  // Danh sách sân bay cho dropdown (lọc theo khu vực)
+  const [airportOptions, setAirportOptions] = useState<any[]>([])
+  const [countryFrom, setCountryFrom] = useState<string>('')
+  const [countryTo, setCountryTo] = useState<string>('')
+
+  // Route case-study (A -> B)
+  const [caseSrc, setCaseSrc] = useState<string>('FRA')
+  const [caseDst, setCaseDst] = useState<string>('SGN')
+  const [caseWithDefense, setCaseWithDefense] = useState<boolean>(true)
+  const [caseResult, setCaseResult] = useState<any | null>(null)
+
+  // Overview / report panel
+  const [showOverview, setShowOverview] = useState<boolean>(false)
   
   // Attack strategy parameters
   const [attackStrategy, setAttackStrategy] = useState<string>('degree_targeted_attack')
@@ -81,6 +119,7 @@ function App() {
     console.log('=== useEffect: loading initial data ===')
     loadData()
     loadRemovedItems()
+    loadAirportOptions()
   }, [selectedRegion])
 
   useEffect(() => {
@@ -135,6 +174,34 @@ function App() {
       console.error('Error loading data:', error)
       alert('Error: ' + (error.message || 'Failed to load data'))
       setLoading(false)
+    }
+  }
+
+  async function loadAirportOptions() {
+    try {
+      const region = REGIONS[selectedRegion]
+      const params: any = {}
+      if (region.bbox) {
+        params.minLat = region.bbox.minLat
+        params.maxLat = region.bbox.maxLat
+        params.minLon = region.bbox.minLon
+        params.maxLon = region.bbox.maxLon
+      }
+      const res = await API.get('/airports/list', { params })
+      const list = res.data.airports || []
+      setAirportOptions(list)
+
+      // Nếu chưa chọn country, set mặc định theo FRA/SGN nếu có
+      if (!countryFrom) {
+        const fra = list.find((a: any) => a.iata === 'FRA')
+        if (fra) setCountryFrom(fra.country)
+      }
+      if (!countryTo) {
+        const sgn = list.find((a: any) => a.iata === 'SGN')
+        if (sgn) setCountryTo(sgn.country)
+      }
+    } catch (error: any) {
+      console.error('Error loading airport options:', error)
     }
   }
 
@@ -363,6 +430,24 @@ function App() {
     }
   }
 
+  async function runRouteCaseStudy() {
+    setLoadingAnalysis(true)
+    try {
+      const params: any = {
+        src_iata: caseSrc,
+        dst_iata: caseDst,
+        with_defense: caseWithDefense
+      }
+      const res = await API.get('/case/route-metrics', { params })
+      setCaseResult(res.data)
+    } catch (error: any) {
+      console.error('Error running route case study:', error)
+      alert('Error: ' + (error.response?.data?.detail || error.message))
+    } finally {
+      setLoadingAnalysis(false)
+    }
+  }
+
   async function loadTopHubs(k: number = 10) {
     try {
       const region = REGIONS[selectedRegion]
@@ -570,7 +655,21 @@ function App() {
             {/* Khu vực */}
             <div style={{ marginBottom: '10px', padding: '8px', background: '#e8f4f8', borderRadius: '4px' }}>
               <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#0066cc', marginBottom: '3px' }}>
-                Đông Nam Á
+                Khu vực phân tích
+              </div>
+              <select
+                value={selectedRegion}
+                onChange={(e) => setSelectedRegion(e.target.value as keyof typeof REGIONS)}
+                style={{ width: '100%', padding: '6px', fontSize: '12px', borderRadius: '4px', border: '1px solid #ccc' }}
+              >
+                {Object.entries(REGIONS).map(([key, r]) => (
+                  <option key={key} value={key}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              <div style={{ fontSize: '10px', color: '#666', marginTop: '4px' }}>
+                Chọn Global để xem toàn bộ mạng bay, hoặc zoom vào từng khu vực.
               </div>
             </div>
             
@@ -691,6 +790,19 @@ function App() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0066cc' }}>Analysis & Controls</h2>
+            <button
+              onClick={() => setShowOverview(true)}
+              style={{
+                padding: '6px 10px',
+                background: '#f5f5f5',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+            >
+              Overview / Report
+            </button>
           </div>
         
           {/* Quick Analysis */}
@@ -878,6 +990,128 @@ function App() {
             </button>
           </div>
 
+          {/* Route Case Study */}
+          <div style={{ marginBottom: '10px' }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#9933cc' }}>Route Case Study</h3>
+            <div style={{ fontSize: '11px', color: '#666', marginBottom: '6px' }}>
+              Chọn <strong>quốc gia</strong> và <strong>sân bay</strong> cho điểm đi/đến. Ví dụ: Đức (FRA) → Việt Nam (SGN).
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+              <div>
+                <label style={{ fontSize: '11px', display: 'block', marginBottom: '2px', color: '#666' }}>From – Country</label>
+                <select
+                  value={countryFrom}
+                  onChange={(e) => setCountryFrom(e.target.value)}
+                  style={{ width: '100%', padding: '5px', fontSize: '12px', borderRadius: '4px', border: '1px solid #ccc', marginBottom: '4px' }}
+                >
+                  <option value="">-- All countries --</option>
+                  {[...new Set(airportOptions.map((a: any) => a.country).filter((c: any) => c))]
+                    .sort()
+                    .map((c: any) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                </select>
+                <label style={{ fontSize: '11px', display: 'block', marginBottom: '2px', color: '#666' }}>From – Airport</label>
+                <select
+                  value={caseSrc}
+                  onChange={(e) => setCaseSrc(e.target.value)}
+                  style={{ width: '100%', padding: '5px', fontSize: '12px', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  {airportOptions
+                    .filter((a: any) => !countryFrom || a.country === countryFrom)
+                    .sort((a: any, b: any) => (a.city || '').localeCompare(b.city || ''))
+                    .map((a: any) => (
+                      <option key={a.id} value={a.iata}>
+                        {a.country} – {a.city} ({a.iata})
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', display: 'block', marginBottom: '2px', color: '#666' }}>To – Country</label>
+                <select
+                  value={countryTo}
+                  onChange={(e) => setCountryTo(e.target.value)}
+                  style={{ width: '100%', padding: '5px', fontSize: '12px', borderRadius: '4px', border: '1px solid #ccc', marginBottom: '4px' }}
+                >
+                  <option value="">-- All countries --</option>
+                  {[...new Set(airportOptions.map((a: any) => a.country).filter((c: any) => c))]
+                    .sort()
+                    .map((c: any) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                </select>
+                <label style={{ fontSize: '11px', display: 'block', marginBottom: '2px', color: '#666' }}>To – Airport</label>
+                <select
+                  value={caseDst}
+                  onChange={(e) => setCaseDst(e.target.value)}
+                  style={{ width: '100%', padding: '5px', fontSize: '12px', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  {airportOptions
+                    .filter((a: any) => !countryTo || a.country === countryTo)
+                    .sort((a: any, b: any) => (a.city || '').localeCompare(b.city || ''))
+                    .map((a: any) => (
+                      <option key={a.id} value={a.iata}>
+                        {a.country} – {a.city} ({a.iata})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
+              <input
+                id="case-with-defense"
+                type="checkbox"
+                checked={caseWithDefense}
+                onChange={(e) => setCaseWithDefense(e.target.checked)}
+                style={{ marginRight: '6px' }}
+              />
+              <label htmlFor="case-with-defense" style={{ fontSize: '11px', color: '#666' }}>
+                Compare with defense (reinforced graph)
+              </label>
+            </div>
+            <button
+              onClick={() => runRouteCaseStudy()}
+              disabled={loadingAnalysis}
+              style={{
+                width: '100%',
+                padding: '8px',
+                background: '#9933cc',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: loadingAnalysis ? 'not-allowed' : 'pointer',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}
+            >
+              {loadingAnalysis ? 'Running...' : 'Analyze Route'}
+            </button>
+
+            {/* Kết quả tóm tắt ngay dưới nút để dễ nhìn */}
+            {caseResult && (
+              <div style={{ marginTop: '8px', padding: '8px', background: '#f9f5ff', borderRadius: '4px', border: '1px solid #e0d5ff', fontSize: '11px' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#6600cc' }}>
+                  {caseResult.src_iata} → {caseResult.dst_iata}
+                </div>
+                <div>
+                  <strong>Baseline</strong> — Connected: {caseResult.baseline?.connected ? 'YES' : 'NO'}, 
+                  Hops: {caseResult.baseline?.hops ?? 'N/A'}, 
+                  Shortest paths: {caseResult.baseline?.num_shortest_paths ?? 0}
+                </div>
+                {caseResult.with_defense && (
+                  <div>
+                    <strong>With Defense</strong> — Connected: {caseResult.with_defense?.connected ? 'YES' : 'NO'}, 
+                    Hops: {caseResult.with_defense?.hops ?? 'N/A'}, 
+                    Shortest paths: {caseResult.with_defense?.num_shortest_paths ?? 0}, 
+                    Added edges: {caseResult.added_edges}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Top-K Impact Settings */}
           <div>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#cc0066' }}>Top-K Impact</h3>
@@ -908,7 +1142,7 @@ function App() {
           </div>
         </div>
 
-        {/* Charts Section */}
+          {/* Charts Section */}
         <div style={{
           flex: '1 1 auto',
           padding: '20px',
@@ -1343,6 +1577,144 @@ function App() {
                 ⭐ Top {idx + 1} Priority
               </div>
             )}
+
+      {/* Overview / Report Panel */}
+      {showOverview && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.4)',
+          zIndex: 4000,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <div style={{
+            background: 'white',
+            width: '900px',
+            maxWidth: '95vw',
+            maxHeight: '90vh',
+            borderRadius: '10px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0066cc' }}>Airline Network Robustness – Overview</h2>
+                <div style={{ fontSize: '12px', color: '#666' }}>Object & Scope • Research Questions • Contributions • Pipeline</div>
+              </div>
+              <button
+                onClick={() => setShowOverview(false)}
+                style={{
+                  background: '#f0f0f0',
+                  border: '1px solid #ccc',
+                  borderRadius: '5px',
+                  padding: '6px 10px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold'
+                }}
+              >
+                ✕ Close
+              </button>
+            </div>
+            <div style={{ padding: '16px 20px', overflowY: 'auto' }}>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#333' }}>1. Object & Scope</h3>
+              <ul style={{ paddingLeft: '18px', fontSize: '12px', color: '#444', marginTop: 0 }}>
+                <li><strong>Đối tượng</strong>: Mạng lưới hàng không OpenFlights (node = sân bay, edge = tuyến bay).</li>
+                <li><strong>Robustness</strong>: Khả năng mạng vẫn kết nối khi một phần sân bay/hub bị hỏng hoặc tấn công.</li>
+                <li><strong>Mục tiêu</strong>: Đo lường robustness, mô phỏng các chiến lược tấn công (random / degree / PageRank / betweenness) và đánh giá chiến lược phòng thủ (thêm cạnh backup giữa các hub).</li>
+              </ul>
+
+              <h3 style={{ margin: '12px 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#333' }}>2. Research Questions</h3>
+              <ul style={{ paddingLeft: '18px', fontSize: '12px', color: '#444', marginTop: 0 }}>
+                <li><strong>Q1</strong>: Robustness hiện tại của mạng bay là gì (LCC, đường kính) dưới tấn công ngẫu nhiên?</li>
+                <li><strong>Q2</strong>: Các chiến lược tấn công có mục tiêu (degree / PageRank / betweenness) làm suy giảm mạng nhanh đến mức nào so với random?</li>
+                <li><strong>Q3</strong>: Các chiến lược phòng thủ (thêm cạnh backup giữa hub gần nhau) cải thiện robustness ra sao, đặc biệt trên các tuyến thực tế A → B?</li>
+              </ul>
+
+              <h3 style={{ margin: '12px 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#333' }}>3. Contributions (tóm tắt)</h3>
+              <ul style={{ paddingLeft: '18px', fontSize: '12px', color: '#444', marginTop: 0 }}>
+                <li>Xây dựng pipeline end-to-end từ dữ liệu OpenFlights → đồ thị → mô phỏng attack/defense → robustness curves.</li>
+                <li>Triển khai và so sánh nhiều chiến lược tấn công node (random, degree, PageRank, betweenness) bằng các metric LCC, đường kính và đường cong suy giảm.</li>
+                <li>Đề xuất chiến lược phòng thủ dựa trên việc thêm cạnh backup giữa các hub trong giới hạn khoảng cách địa lý.</li>
+                <li>Xây dựng web demo tương tác trên bản đồ địa lý, cho phép xoá/khôi phục sân bay & tuyến bay, chạy phân tích tấn công/phòng thủ và case-study đường bay cụ thể.</li>
+              </ul>
+
+              <h3 style={{ margin: '12px 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#333' }}>4. Analysis Pipeline (Overview)</h3>
+              <ol style={{ paddingLeft: '18px', fontSize: '12px', color: '#444', marginTop: 0 }}>
+                <li><strong>Data Ingestion</strong>: Đọc airports.dat và routes.dat, tiền xử lý ID, toạ độ, thuộc tính sân bay.</li>
+                <li><strong>Graph Building</strong>: Xây đồ thị vô hướng (node = airport, edge = route), chọn LCC và (tuỳ chọn) lọc theo vùng địa lý.</li>
+                <li><strong>Attack Simulation</strong>: Mô phỏng random / degree / PageRank / betweenness với nhiều tỉ lệ xoá node, thu thập LCC và đường kính.</li>
+                <li><strong>Defense Design</strong>: Thêm cạnh backup giữa top-k hub trong giới hạn khoảng cách, và phân tích lại robustness.</li>
+                <li><strong>Case Studies</strong>: Phân tích chi tiết các tuyến A → B (ví dụ FRA → SGN, SGN → CFN) trước và sau tấn công/phòng thủ.</li>
+              </ol>
+
+              <h3 style={{ margin: '12px 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#333' }}>5. Metrics & Experiments</h3>
+              <ul style={{ paddingLeft: '18px', fontSize: '12px', color: '#444', marginTop: 0 }}>
+                <li><strong>Metrics chính</strong>: Kích thước LCC tương đối, đường kính LCC; số đường đi ngắn nhất và số bước (hops) giữa các sân bay A → B.</li>
+                <li><strong>Experiments</strong>: Vẽ các đường cong robustness (fraction removed vs LCC / diameter), so sánh attack/defense trên cùng biểu đồ.</li>
+                <li><strong>Demo</strong>: Web app cho phép người dùng thao tác trực tiếp trên bản đồ để kiểm thử các kịch bản tấn công và bảo vệ khác nhau.</li>
+              </ul>
+            </div>
+              </div>
+            </div>
+          )}
+
+          {/* Route Case Study Result */}
+          {caseResult && (
+            <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '2px solid #eee' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#9933cc' }}>
+                Route Case Study: {caseResult.src_iata} → {caseResult.dst_iata}
+              </h4>
+              <div style={{ fontSize: '12px', color: '#444', marginBottom: '8px' }}>
+                Phân tích số đường đi ngắn nhất (unweighted) giữa hai sân bay, trước và sau khi thêm defense.
+              </div>
+              <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                <div style={{ flex: 1, background: 'white', padding: '10px', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
+                  <strong style={{ color: '#333' }}>Baseline (không defense)</strong>
+                  {caseResult.baseline?.connected ? (
+                    <>
+                      <div>Connected: <strong style={{ color: '#00aa00' }}>YES</strong></div>
+                      <div>Hops (số chặng): <strong>{caseResult.baseline.hops}</strong></div>
+                      <div>Số đường đi ngắn nhất: <strong>{caseResult.baseline.num_shortest_paths}</strong></div>
+                      <div>Đường đi ví dụ: <span>{(caseResult.baseline.path_iata || []).join(' → ')}</span></div>
+                    </>
+                  ) : (
+                    <div>Connected: <strong style={{ color: '#cc0000' }}>NO</strong></div>
+                  )}
+                </div>
+                {caseResult.with_defense && (
+                  <div style={{ flex: 1, background: 'white', padding: '10px', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
+                    <strong style={{ color: '#00aa66' }}>With Defense (reinforced)</strong>
+                    {caseResult.with_defense?.connected ? (
+                      <>
+                        <div>Connected: <strong style={{ color: '#00aa00' }}>YES</strong></div>
+                        <div>Hops (số chặng): <strong>{caseResult.with_defense.hops}</strong></div>
+                        <div>Số đường đi ngắn nhất: <strong>{caseResult.with_defense.num_shortest_paths}</strong></div>
+                        <div>Đường đi ví dụ: <span>{(caseResult.with_defense.path_iata || []).join(' → ')}</span></div>
+                      </>
+                    ) : (
+                      <div>Connected: <strong style={{ color: '#cc0000' }}>NO</strong></div>
+                    )}
+                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#666' }}>
+                      Số cạnh backup thêm: <strong>{caseResult.added_edges}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: '8px', fontSize: '11px', color: '#666' }}>
+                <strong>Gợi ý đọc</strong>:{' '}
+                Nếu <em>số đường đi ngắn nhất</em> tăng sau defense, mạng có nhiều lựa chọn tuyến hơn khi một số hub bị tấn công;{' '}
+                nếu mạng bị ngắt kết nối (Connected = NO), đây là kịch bản failure nghiêm trọng.
+              </div>
+            </div>
+          )}
             <div style={{ fontWeight: 'bold', marginBottom: '5px', fontSize: '14px' }}>
               <span style={{ color: '#0066cc' }}>{sug.source_name}</span> ({sug.source_iata})
             </div>

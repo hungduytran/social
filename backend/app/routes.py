@@ -87,6 +87,83 @@ async def get_routes(
     )
     return geojson["routes"]
 
+
+@router.get("/airports/list")
+async def list_airports(
+    minLat: Optional[float] = Query(None),
+    maxLat: Optional[float] = Query(None),
+    minLon: Optional[float] = Query(None),
+    maxLon: Optional[float] = Query(None),
+):
+    """
+    Danh sách sân bay (dùng cho dropdown chọn sân bay trong FE).
+
+    Có thể lọc theo bbox (region) giống các API geojson.
+    """
+    if app_state.graph is None:
+        raise HTTPException(400, "Graph not loaded")
+
+    G = app_state.get_active_graph()
+    if G is None:
+        raise HTTPException(400, "Graph not loaded")
+
+    # Filter by bbox if provided
+    from app.filter import filter_graph_by_bbox
+    import math
+
+    bbox = None
+    if any([minLat, maxLat, minLon, maxLon]):
+        bbox = {
+            "minLat": minLat,
+            "maxLat": maxLat,
+            "minLon": minLon,
+            "maxLon": maxLon,
+        }
+        G = filter_graph_by_bbox(G, bbox)
+
+    airports = []
+    for node_id, data in G.nodes(data=True):
+        lat = data.get("lat")
+        lon = data.get("lon")
+        # Đảm bảo lat/lon là số hữu hạn để JSON không lỗi (NaN/inf -> None)
+        if isinstance(lat, (int, float)) and math.isfinite(lat):
+            safe_lat = float(lat)
+        else:
+            safe_lat = None
+        if isinstance(lon, (int, float)) and math.isfinite(lon):
+            safe_lon = float(lon)
+        else:
+            safe_lon = None
+
+        # Các trường text có thể là NaN (float) -> convert an toàn sang chuỗi hoặc rỗng
+        name = data.get("name", "")
+        city = data.get("city", "")
+        country = data.get("country", "")
+        iata = data.get("iata", "")
+
+        if not isinstance(name, str):
+            name = "" if name is None else str(name)
+        if not isinstance(city, str):
+            city = "" if city is None else str(city)
+        if not isinstance(country, str):
+            country = "" if country is None else str(country)
+        if not isinstance(iata, str):
+            iata = "" if iata is None else str(iata)
+
+        airports.append(
+            {
+                "id": int(node_id),
+                "name": name,
+                "city": city,
+                "country": country,
+                "iata": iata,
+                "lat": safe_lat,
+                "lon": safe_lon,
+            }
+        )
+
+    return {"airports": airports}
+
 @router.post("/simulate")
 async def simulate(req: SimulateRequest):
     """Run attack simulation"""

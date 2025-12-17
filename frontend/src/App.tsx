@@ -916,19 +916,36 @@ function App() {
 
           {/* Custom Defense Strategy */}
           <div style={{ marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #eee' }}>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#00cc66' }}>Custom Defense</h3>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#00cc66' }}>
+              🛡️ TER Defense (Effective Resistance)
+            </h3>
+            <div style={{ 
+              fontSize: '10px', 
+              color: '#666', 
+              marginBottom: '10px', 
+              padding: '8px', 
+              background: '#f0f8f4', 
+              borderRadius: '4px',
+              lineHeight: '1.4'
+            }}>
+              <strong>Phương pháp:</strong> Thêm cạnh backup dựa trên <strong>Effective Resistance</strong> (TER - TITS2018). 
+              Chọn k cạnh có R_eff cao nhất trong giới hạn khoảng cách để tăng robustness.
+            </div>
             <div style={{ marginBottom: '8px' }}>
               <label style={{ fontSize: '11px', display: 'block', marginBottom: '3px', color: '#666' }}>
-                Top K Hubs: {kHubs}
+                Số cạnh backup (k): {kHubs}
               </label>
               <input
                 type="range"
                 min="5"
-                max="20"
+                max="200"
                 value={kHubs}
                 onChange={(e) => setKHubs(Number(e.target.value))}
                 style={{ width: '100%' }}
               />
+              <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                Số cạnh backup sẽ được thêm vào graph (không xóa cạnh cũ)
+              </div>
             </div>
             <div style={{ marginBottom: '8px' }}>
               <label style={{ fontSize: '11px', display: 'block', marginBottom: '3px', color: '#666' }}>
@@ -943,6 +960,9 @@ function App() {
                 onChange={(e) => setMaxDistance(Number(e.target.value))}
                 style={{ width: '100%' }}
               />
+              <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                Chỉ xét các cặp sân bay trong phạm vi này
+              </div>
             </div>
             <div style={{ marginBottom: '8px' }}>
               <label style={{ fontSize: '11px', display: 'block', marginBottom: '3px', color: '#666' }}>Test Attack:</label>
@@ -953,8 +973,12 @@ function App() {
               >
                 <option value="degree_targeted_attack">Degree Targeted</option>
                 <option value="random_attack">Random Attack</option>
+                <option value="pagerank_targeted_attack">PageRank Targeted</option>
                 <option value="betweenness_targeted_attack">Betweenness Targeted</option>
               </select>
+              <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                Chiến lược tấn công để đánh giá hiệu quả defense
+              </div>
             </div>
             <button
               onClick={() => runCustomDefenseAnalysis()}
@@ -972,7 +996,7 @@ function App() {
                 boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
               }}
             >
-              Run Custom Defense
+              {loadingAnalysis ? 'Running...' : 'Run TER Defense'}
             </button>
           </div>
 
@@ -1053,7 +1077,7 @@ function App() {
                 style={{ marginRight: '6px' }}
               />
               <label htmlFor="case-with-defense" style={{ fontSize: '11px', color: '#666' }}>
-                Compare with defense (reinforced graph)
+                Compare with TER Defense (Effective Resistance - thêm cạnh backup)
               </label>
             </div>
             <button
@@ -1215,7 +1239,18 @@ function App() {
               )}
 
               {/* Chart 1: Fraction Removed vs Relative LCC Size */}
-              {robustnessCurves.random_attack && (
+              {(() => {
+                const ref =
+                  robustnessCurves.random_attack ||
+                  robustnessCurves.degree_targeted_attack ||
+                  robustnessCurves.pagerank_targeted_attack ||
+                  robustnessCurves.betweenness_targeted_attack
+
+                if (!ref) return null
+
+                const fractions = ref.fraction_removed || []
+
+                return (
                 <div style={{ 
                   marginBottom: '30px',
                   padding: '15px',
@@ -1230,39 +1265,65 @@ function App() {
                   <div 
                     onClick={() => setZoomedChart({
                       title: 'Fraction Removed vs Relative LCC Size',
-                      data: robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
+                      data: fractions.map((f: number, i: number) => ({
                         fraction: f,
-                        'Random Attack': robustnessCurves.random_attack.relative_lcc_size[i],
-                        'Degree Targeted': robustnessCurves.degree_targeted_attack?.relative_lcc_size[i] || null,
-                        'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.relative_lcc_size[i] || null
+                        ...(robustnessCurves.random_attack && {
+                          'Random Attack': robustnessCurves.random_attack.relative_lcc_size[i],
+                        }),
+                        ...(robustnessCurves.degree_targeted_attack && {
+                          'Degree Targeted': robustnessCurves.degree_targeted_attack.relative_lcc_size[i],
+                        }),
+                        ...(robustnessCurves.pagerank_targeted_attack && {
+                          'PageRank Targeted': robustnessCurves.pagerank_targeted_attack.relative_lcc_size[i],
+                        }),
+                        ...(robustnessCurves.betweenness_targeted_attack && {
+                          'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack.relative_lcc_size[i],
+                        }),
                       })),
                       config: {
                         xKey: 'fraction',
                         xLabel: 'Fraction Removed',
                         yLabel: 'Relative LCC Size',
                         lines: [
-                          { key: 'Random Attack', stroke: '#8884d8' },
-                          { key: 'Degree Targeted', stroke: '#82ca9d' },
-                          { key: 'Betweenness Targeted', stroke: '#ff7300' }
+                          ...(robustnessCurves.random_attack ? [{ key: 'Random Attack', stroke: '#8884d8' }] : []),
+                          ...(robustnessCurves.degree_targeted_attack ? [{ key: 'Degree Targeted', stroke: '#82ca9d' }] : []),
+                          ...(robustnessCurves.pagerank_targeted_attack ? [{ key: 'PageRank Targeted', stroke: '#9933cc' }] : []),
+                          ...(robustnessCurves.betweenness_targeted_attack ? [{ key: 'Betweenness Targeted', stroke: '#ff7300' }] : []),
                         ]
                       }
                     })}
                     style={{ cursor: 'pointer' }}
                   >
                     <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
+                    <LineChart data={fractions.map((f: number, i: number) => ({
                         fraction: f,
-                        'Random Attack': robustnessCurves.random_attack.relative_lcc_size[i],
-                        'Degree Targeted': robustnessCurves.degree_targeted_attack?.relative_lcc_size[i] || null,
-                        'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.relative_lcc_size[i] || null
+                        ...(robustnessCurves.random_attack && {
+                          'Random Attack': robustnessCurves.random_attack.relative_lcc_size[i],
+                        }),
+                        ...(robustnessCurves.degree_targeted_attack && {
+                          'Degree Targeted': robustnessCurves.degree_targeted_attack.relative_lcc_size[i],
+                        }),
+                        ...(robustnessCurves.pagerank_targeted_attack && {
+                          'PageRank Targeted': robustnessCurves.pagerank_targeted_attack.relative_lcc_size[i],
+                        }),
+                        ...(robustnessCurves.betweenness_targeted_attack && {
+                          'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack.relative_lcc_size[i],
+                        }),
                       }))}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
                         <YAxis label={{ value: 'Relative LCC Size', angle: -90, position: 'insideLeft' }} />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="Random Attack" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
-                        <Line type="monotone" dataKey="Degree Targeted" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
+                        {robustnessCurves.random_attack && (
+                          <Line type="monotone" dataKey="Random Attack" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                        {robustnessCurves.degree_targeted_attack && (
+                          <Line type="monotone" dataKey="Degree Targeted" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                        {robustnessCurves.pagerank_targeted_attack && (
+                          <Line type="monotone" dataKey="PageRank Targeted" stroke="#9933cc" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
                         {robustnessCurves.betweenness_targeted_attack && (
                           <Line type="monotone" dataKey="Betweenness Targeted" stroke="#ff7300" strokeWidth={2} dot={{ r: 3 }} />
                         )}
@@ -1273,10 +1334,22 @@ function App() {
                     Click để phóng to
                   </div>
                 </div>
-              )}
+                )
+              })()}
 
               {/* Chart 2: Fraction Removed vs Diameter */}
-              {robustnessCurves.random_attack && (
+              {(() => {
+                const ref =
+                  robustnessCurves.random_attack ||
+                  robustnessCurves.degree_targeted_attack ||
+                  robustnessCurves.pagerank_targeted_attack ||
+                  robustnessCurves.betweenness_targeted_attack
+
+                if (!ref) return null
+
+                const fractions = ref.fraction_removed || []
+
+                return (
                 <div style={{ 
                   marginBottom: '30px',
                   padding: '15px',
@@ -1291,39 +1364,65 @@ function App() {
                   <div 
                     onClick={() => setZoomedChart({
                       title: 'Fraction Removed vs Diameter',
-                      data: robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
+                      data: fractions.map((f: number, i: number) => ({
                         fraction: f,
-                        'Random Attack': robustnessCurves.random_attack.diameter[i],
-                        'Degree Targeted': robustnessCurves.degree_targeted_attack?.diameter[i] || null,
-                        'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.diameter[i] || null
+                        ...(robustnessCurves.random_attack && {
+                          'Random Attack': robustnessCurves.random_attack.diameter[i],
+                        }),
+                        ...(robustnessCurves.degree_targeted_attack && {
+                          'Degree Targeted': robustnessCurves.degree_targeted_attack.diameter[i],
+                        }),
+                        ...(robustnessCurves.pagerank_targeted_attack && {
+                          'PageRank Targeted': robustnessCurves.pagerank_targeted_attack.diameter[i],
+                        }),
+                        ...(robustnessCurves.betweenness_targeted_attack && {
+                          'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack.diameter[i],
+                        }),
                       })),
                       config: {
                         xKey: 'fraction',
                         xLabel: 'Fraction Removed',
                         yLabel: 'Diameter',
                         lines: [
-                          { key: 'Random Attack', stroke: '#8884d8' },
-                          { key: 'Degree Targeted', stroke: '#82ca9d' },
-                          { key: 'Betweenness Targeted', stroke: '#ff7300' }
+                          ...(robustnessCurves.random_attack ? [{ key: 'Random Attack', stroke: '#8884d8' }] : []),
+                          ...(robustnessCurves.degree_targeted_attack ? [{ key: 'Degree Targeted', stroke: '#82ca9d' }] : []),
+                          ...(robustnessCurves.pagerank_targeted_attack ? [{ key: 'PageRank Targeted', stroke: '#9933cc' }] : []),
+                          ...(robustnessCurves.betweenness_targeted_attack ? [{ key: 'Betweenness Targeted', stroke: '#ff7300' }] : []),
                         ]
                       }
                     })}
                     style={{ cursor: 'pointer' }}
                   >
                     <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={robustnessCurves.random_attack.fraction_removed.map((f: number, i: number) => ({
+                    <LineChart data={fractions.map((f: number, i: number) => ({
                         fraction: f,
-                        'Random Attack': robustnessCurves.random_attack.diameter[i],
-                        'Degree Targeted': robustnessCurves.degree_targeted_attack?.diameter[i] || null,
-                        'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack?.diameter[i] || null
+                        ...(robustnessCurves.random_attack && {
+                          'Random Attack': robustnessCurves.random_attack.diameter[i],
+                        }),
+                        ...(robustnessCurves.degree_targeted_attack && {
+                          'Degree Targeted': robustnessCurves.degree_targeted_attack.diameter[i],
+                        }),
+                        ...(robustnessCurves.pagerank_targeted_attack && {
+                          'PageRank Targeted': robustnessCurves.pagerank_targeted_attack.diameter[i],
+                        }),
+                        ...(robustnessCurves.betweenness_targeted_attack && {
+                          'Betweenness Targeted': robustnessCurves.betweenness_targeted_attack.diameter[i],
+                        }),
                       }))}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
                         <YAxis label={{ value: 'Diameter', angle: -90, position: 'insideLeft' }} />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="Random Attack" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
-                        <Line type="monotone" dataKey="Degree Targeted" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
+                        {robustnessCurves.random_attack && (
+                          <Line type="monotone" dataKey="Random Attack" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                        {robustnessCurves.degree_targeted_attack && (
+                          <Line type="monotone" dataKey="Degree Targeted" stroke="#82ca9d" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                        {robustnessCurves.pagerank_targeted_attack && (
+                          <Line type="monotone" dataKey="PageRank Targeted" stroke="#9933cc" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
                         {robustnessCurves.betweenness_targeted_attack && (
                           <Line type="monotone" dataKey="Betweenness Targeted" stroke="#ff7300" strokeWidth={2} dot={{ r: 3 }} />
                         )}
@@ -1334,7 +1433,8 @@ function App() {
                     Click để phóng to
                   </div>
                 </div>
-              )}
+                )
+              })()}
 
               {/* Defense comparison if available */}
               {robustnessCurves.degree_attack_original && (
@@ -1348,7 +1448,7 @@ function App() {
                   boxShadow: '0 2px 6px rgba(0,204,102,0.15)'
                 }}>
                   <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 'bold', color: '#00cc66' }}>
-                    🛡️ Defense: Reinforced vs Original
+                    🛡️ TER Defense: Reinforced vs Original
                   </h4>
                   <div style={{ 
                     fontSize: '12px', 
@@ -1358,12 +1458,15 @@ function App() {
                     background: '#f0f8f4',
                     borderRadius: '5px'
                   }}>
+                    <div style={{ marginBottom: '6px' }}>
+                      <strong>Phương pháp:</strong> TER (Topological Effective Resistance) - Thêm cạnh backup dựa trên Effective Resistance
+                    </div>
                     <div><strong>Original:</strong> {robustnessCurves.baseline_original?.edges} edges</div>
                     <div><strong>Reinforced:</strong> {robustnessCurves.baseline_reinforced?.edges} edges (+{robustnessCurves.baseline_reinforced?.edges - robustnessCurves.baseline_original?.edges} backup edges)</div>
                   </div>
                   <div 
                     onClick={() => setZoomedChart({
-                      title: 'Defense: Reinforced vs Original',
+                      title: 'TER Defense: Reinforced vs Original',
                       data: robustnessCurves.degree_attack_original.fraction_removed.map((f: number, i: number) => ({
                         fraction: f,
                         'Original (Degree Attack)': robustnessCurves.degree_attack_original.relative_lcc_size[i],
@@ -1415,7 +1518,7 @@ function App() {
                   boxShadow: '0 2px 6px rgba(0,204,102,0.15)'
                 }}>
                   <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 'bold', color: '#00cc66' }}>
-                    🛡️ Custom Defense: {robustnessCurves.attack_strategy?.replace('_', ' ').replace('attack', '').trim()}
+                    🛡️ TER Defense (Effective Resistance): {robustnessCurves.attack_strategy?.replace('_', ' ').replace('attack', '').trim()}
                   </h4>
                   <div style={{ 
                     fontSize: '12px', 
@@ -1425,9 +1528,14 @@ function App() {
                     background: '#f0f8f4',
                     borderRadius: '5px'
                   }}>
+                    <div style={{ marginBottom: '6px' }}>
+                      <strong>Phương pháp:</strong> TER (Topological Effective Resistance) - Thêm cạnh backup dựa trên Effective Resistance
+                    </div>
                     <div><strong>Original:</strong> {robustnessCurves.baseline_original?.edges} edges</div>
-                    <div><strong>Reinforced:</strong> {robustnessCurves.baseline_reinforced?.edges} edges (+{robustnessCurves.added_edges} backup)</div>
-                    <div><strong>Configuration:</strong> Top-{robustnessCurves.k_hubs} hubs, Max distance: {robustnessCurves.max_distance_km}km</div>
+                    <div><strong>Reinforced:</strong> {robustnessCurves.baseline_reinforced?.edges} edges (+{robustnessCurves.added_edges} backup edges)</div>
+                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#555' }}>
+                      <strong>Configuration:</strong> k={robustnessCurves.k_hubs} backup edges, Max distance: {robustnessCurves.max_distance_km}km
+                    </div>
                   </div>
                   <div 
                     onClick={() => setZoomedChart({
@@ -1739,7 +1847,9 @@ function App() {
           overflow: 'auto'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#00cc66' }}>Where to Add Redundancy?</h3>
+            <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#00cc66' }}>
+              🛡️ Where to Add Redundancy? (TER Method)
+            </h3>
             <button
               onClick={() => setShowRecommendationsPanel(false)}
               style={{
@@ -1756,7 +1866,12 @@ function App() {
             </button>
           </div>
           <div style={{ fontSize: '13px', color: '#666', marginBottom: '20px', padding: '12px', background: '#f0f8f0', borderRadius: '6px' }}>
-            <strong>Recommendations:</strong> Top {redundancySuggestions.length} backup routes to improve network robustness
+            <div style={{ marginBottom: '6px' }}>
+              <strong>Phương pháp:</strong> TER (Topological Effective Resistance) - Đề xuất các cạnh backup dựa trên Effective Resistance cao nhất
+            </div>
+            <div>
+              <strong>Recommendations:</strong> Top {redundancySuggestions.length} backup routes để cải thiện network robustness
+            </div>
           </div>
           <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
                 {redundancySuggestions.map((sug, idx) => (
@@ -1827,21 +1942,21 @@ function App() {
               <ul style={{ paddingLeft: '18px', fontSize: '12px', color: '#444', marginTop: 0 }}>
                 <li><strong>Đối tượng</strong>: Mạng lưới hàng không OpenFlights (node = sân bay, edge = tuyến bay).</li>
                 <li><strong>Robustness</strong>: Khả năng mạng vẫn kết nối khi một phần sân bay/hub bị hỏng hoặc tấn công.</li>
-                <li><strong>Mục tiêu</strong>: Đo lường robustness, mô phỏng các chiến lược tấn công (random / degree / PageRank / betweenness) và đánh giá chiến lược phòng thủ (thêm cạnh backup giữa các hub).</li>
+                <li><strong>Mục tiêu</strong>: Đo lường robustness, mô phỏng các chiến lược tấn công (random / degree / PageRank / betweenness) và đánh giá chiến lược phòng thủ <strong>TER (Effective Resistance - thêm cạnh backup)</strong>.</li>
               </ul>
 
               <h3 style={{ margin: '12px 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#333' }}>2. Research Questions</h3>
               <ul style={{ paddingLeft: '18px', fontSize: '12px', color: '#444', marginTop: 0 }}>
                 <li><strong>Q1</strong>: Robustness hiện tại của mạng bay là gì (LCC, đường kính) dưới tấn công ngẫu nhiên?</li>
                 <li><strong>Q2</strong>: Các chiến lược tấn công có mục tiêu (degree / PageRank / betweenness) làm suy giảm mạng nhanh đến mức nào so với random?</li>
-                <li><strong>Q3</strong>: Các chiến lược phòng thủ (thêm cạnh backup giữa hub gần nhau) cải thiện robustness ra sao, đặc biệt trên các tuyến thực tế A → B?</li>
+                <li><strong>Q3</strong>: Chiến lược phòng thủ <strong>TER (Effective Resistance)</strong> - thêm cạnh backup dựa trên R_eff cao nhất - cải thiện robustness ra sao, đặc biệt trên các tuyến thực tế A → B?</li>
               </ul>
 
               <h3 style={{ margin: '12px 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#333' }}>3. Contributions (tóm tắt)</h3>
               <ul style={{ paddingLeft: '18px', fontSize: '12px', color: '#444', marginTop: 0 }}>
                 <li>Xây dựng pipeline end-to-end từ dữ liệu OpenFlights → đồ thị → mô phỏng attack/defense → robustness curves.</li>
                 <li>Triển khai và so sánh nhiều chiến lược tấn công node (random, degree, PageRank, betweenness) bằng các metric LCC, đường kính và đường cong suy giảm.</li>
-                <li>Đề xuất chiến lược phòng thủ dựa trên việc thêm cạnh backup giữa các hub trong giới hạn khoảng cách địa lý.</li>
+                <li>Triển khai chiến lược phòng thủ <strong>TER (Topological Effective Resistance)</strong> - thêm k cạnh backup có Effective Resistance cao nhất trong giới hạn khoảng cách địa lý để cải thiện robustness.</li>
                 <li>Xây dựng web demo tương tác trên bản đồ địa lý, cho phép xoá/khôi phục sân bay & tuyến bay, chạy phân tích tấn công/phòng thủ và case-study đường bay cụ thể.</li>
               </ul>
 
@@ -1850,7 +1965,7 @@ function App() {
                 <li><strong>Data Ingestion</strong>: Đọc airports.dat và routes.dat, tiền xử lý ID, toạ độ, thuộc tính sân bay.</li>
                 <li><strong>Graph Building</strong>: Xây đồ thị vô hướng (node = airport, edge = route), chọn LCC và (tuỳ chọn) lọc theo vùng địa lý.</li>
                 <li><strong>Attack Simulation</strong>: Mô phỏng random / degree / PageRank / betweenness với nhiều tỉ lệ xoá node, thu thập LCC và đường kính.</li>
-                <li><strong>Defense Design</strong>: Thêm cạnh backup giữa top-k hub trong giới hạn khoảng cách, và phân tích lại robustness.</li>
+                <li><strong>Defense Design</strong>: Sử dụng phương pháp <strong>TER (Topological Effective Resistance)</strong> - thêm k cạnh backup có Effective Resistance cao nhất trong giới hạn khoảng cách địa lý, và phân tích lại robustness.</li>
                 <li><strong>Case Studies</strong>: Phân tích chi tiết các tuyến A → B (ví dụ FRA → SGN, SGN → CFN) trước và sau tấn công/phòng thủ.</li>
               </ol>
 
@@ -1872,7 +1987,7 @@ function App() {
                 Route Case Study: {caseResult.src_iata} → {caseResult.dst_iata}
               </h4>
               <div style={{ fontSize: '12px', color: '#444', marginBottom: '8px' }}>
-                Phân tích số đường đi ngắn nhất (unweighted) giữa hai sân bay, trước và sau khi thêm defense.
+                Phân tích số đường đi ngắn nhất (unweighted) giữa hai sân bay, trước và sau khi thêm <strong>TER Defense</strong> (Effective Resistance - thêm cạnh backup).
               </div>
               <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
                 <div style={{ flex: 1, background: 'white', padding: '10px', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
@@ -1890,7 +2005,10 @@ function App() {
                 </div>
                 {caseResult.with_defense && (
                   <div style={{ flex: 1, background: 'white', padding: '10px', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
-                    <strong style={{ color: '#00aa66' }}>With Defense (reinforced)</strong>
+                    <strong style={{ color: '#00aa66' }}>With TER Defense (reinforced)</strong>
+                    <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>
+                      Phương pháp: Effective Resistance - thêm cạnh backup
+                    </div>
                     {caseResult.with_defense?.connected ? (
                       <>
                         <div>Connected: <strong style={{ color: '#00aa00' }}>YES</strong></div>

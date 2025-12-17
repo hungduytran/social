@@ -716,18 +716,20 @@ async def get_attack_impact_custom(
     if len(G) == 0:
         raise HTTPException(400, "No nodes in region")
     
-    # Check if betweenness is feasible
-    if strategy == "betweenness_targeted_attack" and len(G) > 200:
-        raise HTTPException(400, "Betweenness attack too slow for graphs > 200 nodes")
-    
     baseline = get_stats(G)
     
     # Define fractions
     num_points = 11
     fractions = [round(i * max_fraction / (num_points - 1), 3) for i in range(num_points)]
     
-    # Run attack
-    result = simulate_attack(G, strategy, fractions=fractions, n_runs=n_runs if strategy == "random_attack" else 1, seed=42)
+    # Run attack (betweenness is already approximated inside simulate_attack for large graphs)
+    result = simulate_attack(
+        G,
+        strategy,
+        fractions=fractions,
+        n_runs=n_runs if strategy == "random_attack" else 1,
+        seed=42,
+    )
     
     return {
         "baseline": baseline,

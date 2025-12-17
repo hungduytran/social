@@ -1,0 +1,78 @@
+Installing OpenFlights/Nginx on Ubuntu 22 Minimal LTS
+=====================================================
+
+The following assumes you have a fresh install of Ubuntu 22 Minimal and you're
+logged in as a user with sudo rights.
+
+This is intended as a recipe to be followed by hand, not a fire-and-forget
+script that can do the job automatically.
+
+# None of these are strictly necessary, but they make debugging easier
+sudo apt-get install man vim mysql-client
+
+# OpenFlights does not support PHP8, so we need to hack in PHP7
+sudo apt install software-properties-common apt-transport-https -y
+sudo add-apt-repository ppa:ondrej/php -y
+sudo apt-get install git nginx php7.4 php7.4-curl php7.4-fpm php7.4-gd php7.4-intl php7.4-mbstring php7.4-mysql php7.4-xml locales unzip
+
+# Install OpenFlights as its own user
+sudo adduser openflights
+alias sugit='sudo -u openflights git'
+sugit clone https://github.com/jpatokal/openflights.git /home/openflights/openflights
+sudo ln -s /home/openflights/openflights /var/www/openflights
+
+# Set up Nginx. Edit domain(s) in config as needed.
+cd /home/openflights/openflights
+sudo cp nginx/openflights /etc/nginx/sites-available/
+sudo vi /etc/nginx/sites-available/openflights
+
+sudo ln -s /etc/nginx/sites-available/openflights /etc/nginx/sites-enabled/
+sudo unlink /etc/nginx/sites-enabled/default
+
+# Set up SSL with Certbot
+sudo apt-get install certbot python3-certbot-nginx
+sudo certbot --nginx -d [YOUR_DOMAIN]
+
+# Set up Composer and install packages
+curl -sS https://getcomposer.org/installer | sudo php -- --install-dir=/usr/local/bin --filename=composer
+sudo -u openflights php /usr/local/bin/composer install
+
+# Set up npm packages if you're going to be developing OpenFlights
+sudo apt-get install npm
+sudo -u openflights npm install
+
+# Generates locales for language support
+cd openflights
+find locale -name *utf8 -printf '%f ' | xargs sudo locale-gen
+
+# Enable uploads and badge caching
+sudo -u openflights mkdir import
+sudo -u openflights mkdir badge/cache
+
+# Set up local config for database, locals, Github etc.
+sudo -u openflights cp php/config.php.sample php/config.php
+
+# Set up TripIt (if you need it)
+sudo -u openflights vi php/secrets.php
+<<<
+<?php
+$tripit_app_id = "[YOUR-ID]";
+$tripit_app_secret = "[YOUR-APP-SECRET]";
+>>>
+
+# Set up email and cron for account expiry
+# Remember to set up Mailgun integration: https://cloud.google.com/compute/docs/tutorials/sending-mail/using-mailgun
+sudo apt-get install crontab postfix mailutils
+sudo crontab -e <<FOO
+0 2 * * * /bin/bash /home/openflights/openflights/elite/expire.sh >>/var/log/cronrun 2>&1
+FOO
+
+# Set up other cron jobs for SQL related queries and updates
+# sql/top10.sql >data/top10.dat
+# sql/update-demo.sql
+
+# Copy ads, analytics
+sudo -u openflights vi html/ad.html
+sudo -u openflights vi html/analytics.html
+sudo -u openflights vi html/ad-sidebar.html
+

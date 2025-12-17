@@ -172,8 +172,13 @@ def add_edges_by_effective_resistance(
         idx, g, ground_node, lu = _build_grounded_laplacian_lu(H, node_list)
     except Exception as e:
         # Fallback to simple method if LU factorization fails
+        # Return LCC only (matching notebook implementation)
         print(f"Warning: LU factorization failed, using simple defense: {e}")
-        return reinforce_graph_simple(H, k, max_distance_km)
+        H_reinforced = reinforce_graph_simple(H, k, max_distance_km)
+        # Return LCC with added edges
+        added = [(u, v, {"defense": "simple", "backup": True}) 
+                 for u, v in H_reinforced.edges() if not H.has_edge(u, v)]
+        return H_reinforced, added
 
     cand = sample_candidate_edges(H, max_candidates=max_candidates,
                                   max_distance_km=max_distance_km, seed=seed)
@@ -188,7 +193,9 @@ def add_edges_by_effective_resistance(
 
     scored.sort(reverse=True, key=lambda x: x[0])
 
-    Hr = H.copy()
+    # Follow notebook implementation: work on LCC and return LCC (with added edges)
+    # This ensures same number of nodes as input LCC
+    Hr = H.copy()  # Start with LCC subgraph
     added = []
     for reff, u, v, d in scored[:k]:
         meta = {"defense": "TER_like", "Reff": float(reff)}

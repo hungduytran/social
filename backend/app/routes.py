@@ -11,7 +11,7 @@ from app.attacks import (
     betweenness_targeted_attack,
     pagerank_targeted_attack,
 )
-from app.defense import reinforce_graph
+from app.defense import reinforce_graph, add_edges_by_effective_resistance
 from app.geojson import to_geojson
 from app.redundancy import suggest_redundancy
 from app.filter import filter_graph_by_bbox
@@ -531,22 +531,35 @@ async def get_defense_impact(
     if len(G) == 0:
         raise HTTPException(400, "No nodes in region")
     
-    print(f"Computing defense impact for {len(G)} nodes")
+    # IMPORTANT: Filter to LCC only (matching notebook implementation)
+    from app.metrics import get_lcc
+    lcc_nodes = get_lcc(G)
+    G_lcc = G.subgraph(lcc_nodes).copy()
+    N0_original = len(G_lcc)
     
-    # Reinforce graph
-    G_reinforced = reinforce_graph(G, k=k_hubs, max_distance_km=2000)
-    print(f"Reinforced graph: {G_reinforced.number_of_edges()} edges (original: {G.number_of_edges()})")
+    print(f"Computing defense impact for LCC: {N0_original} nodes (original graph had {len(G)} nodes)")
     
-    baseline_original = get_stats(G)
+    # Reinforce graph (TER method works on LCC and returns LCC)
+    G_reinforced, added_edges_list = add_edges_by_effective_resistance(
+        G_lcc, 
+        k=k_hubs, 
+        max_candidates=min(20000, k_hubs * 100),
+        max_distance_km=2000, 
+        seed=123
+    )
+    added_edges_count = len(added_edges_list)
+    print(f"Reinforced graph: {G_reinforced.number_of_edges()} edges (original LCC: {G_lcc.number_of_edges()}, added: {added_edges_count})")
+    
+    baseline_original = get_stats(G_lcc)
     baseline_reinforced = get_stats(G_reinforced)
     
     fractions = [round(i * 0.05, 2) for i in range(11)]
     
-    # Test degree attack on both
-    print("Testing degree attack on original graph...")
-    degree_original = simulate_attack(G, "degree_targeted_attack", fractions=fractions, n_runs=1)
+    # Test degree attack on both (both are LCC with same nodes)
+    print(f"Testing degree attack on original LCC (N0={N0_original})...")
+    degree_original = simulate_attack(G_lcc, "degree_targeted_attack", fractions=fractions, n_runs=1)
     
-    print("Testing degree attack on reinforced graph...")
+    print(f"Testing degree attack on reinforced LCC (N0={len(G_reinforced)})...")
     degree_reinforced = simulate_attack(G_reinforced, "degree_targeted_attack", fractions=fractions, n_runs=1)
     
     return {
@@ -774,20 +787,42 @@ async def get_defense_impact_custom(
     
     print(f"Computing defense impact: k_hubs={k_hubs}, max_distance={max_distance_km}km")
     
-    # Reinforce graph
-    G_reinforced = reinforce_graph(G, k=k_hubs, max_distance_km=max_distance_km)
-    added_edges = G_reinforced.number_of_edges() - G.number_of_edges()
+    # IMPORTANT: Filter to LCC only (matching notebook implementation)
+    # This ensures both Original and Reinforced work on the same set of nodes
+    from app.metrics import get_lcc
+    lcc_nodes = get_lcc(G)
+    G_lcc = G.subgraph(lcc_nodes).copy()
+    N0_original = len(G_lcc)
     
-    baseline_original = get_stats(G)
+    print(f"Working on LCC: {N0_original} nodes (original graph had {len(G)} nodes)")
+    
+    # Reinforce graph (TER method works on LCC and returns LCC)
+    G_reinforced, added_edges_list = add_edges_by_effective_resistance(
+        G_lcc, 
+        k=k_hubs, 
+        max_candidates=min(20000, k_hubs * 100),
+        max_distance_km=max_distance_km, 
+        seed=123
+    )
+    added_edges = len(added_edges_list)
+    
+    # Verify both graphs have the same number of nodes (both should be LCC)
+    if len(G_reinforced) != N0_original:
+        print(f"Warning: Reinforced graph has {len(G_reinforced)} nodes, LCC has {N0_original} nodes")
+    else:
+        print(f"Verified: Both graphs have {N0_original} nodes")
+    
+    # Use LCC for both original and reinforced (both have same nodes)
+    baseline_original = get_stats(G_lcc)
     baseline_reinforced = get_stats(G_reinforced)
     
     fractions = [round(i * 0.05, 2) for i in range(11)]
     
-    # Test attack on both
-    print(f"Testing {attack_strategy} on original graph...")
-    attack_original = simulate_attack(G, attack_strategy, fractions=fractions, n_runs=1)
+    # Test attack on both (both will normalize by N0_original, which is the same)
+    print(f"Testing {attack_strategy} on original LCC (N0={N0_original})...")
+    attack_original = simulate_attack(G_lcc, attack_strategy, fractions=fractions, n_runs=1)
     
-    print(f"Testing {attack_strategy} on reinforced graph...")
+    print(f"Testing {attack_strategy} on reinforced LCC (N0={len(G_reinforced)})...")
     attack_reinforced = simulate_attack(G_reinforced, attack_strategy, fractions=fractions, n_runs=1)
     
     return {
@@ -866,8 +901,25 @@ async def route_metrics(
     defense_metrics = None
     added_edges = 0
     if with_defense:
-        G_def = reinforce_graph(G_full, k=10, max_distance_km=3000)
-        added_edges = G_def.number_of_edges() - G_full.number_of_edges()
+        # IMPORTANT: Filter to LCC only (matching notebook implementation)
+        # This ensures TER defense works on LCC and returns LCC
+        from app.metrics import get_lcc
+        lcc_nodes = get_lcc(G_full)
+        G_lcc = G_full.subgraph(lcc_nodes).copy()
+        
+        # Check if both airports are in LCC
+        if src_id not in G_lcc or dst_id not in G_lcc:
+            raise HTTPException(400, f"Airports {src_iata} and/or {dst_iata} are not in the largest connected component")
+        
+        # Reinforce LCC using TER method
+        G_def, added_edges_list = add_edges_by_effective_resistance(
+            G_lcc, 
+            k=10, 
+            max_candidates=2000,
+            max_distance_km=3000, 
+            seed=123
+        )
+        added_edges = len(added_edges_list)
         defense_metrics = compute_metrics(G_def)
 
     return {

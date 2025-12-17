@@ -4,7 +4,7 @@ import networkx as nx
 import numpy as np
 from typing import List, Dict
 
-from app.metrics import get_stats
+from app.metrics import get_stats, get_lcc, diameter
 
 
 def random_attack(G: nx.Graph, k: int, seed: int = None) -> List[int]:
@@ -133,6 +133,10 @@ def simulate_attack(
         fractions = [round(i * 0.05, 2) for i in range(11)]
 
     original_size = len(G)
+    # IMPORTANT: Normalize LCC size theo số node ban đầu (N0), không phải số node hiện tại
+    # Để đảm bảo khi so sánh Original vs Reinforced, cả 2 đều bắt đầu từ 1.0
+    N0 = original_size
+    
     results: Dict[str, list] = {
         "fraction_removed": [],
         "relative_lcc_size": [],
@@ -163,9 +167,13 @@ def simulate_attack(
                         G_copy.remove_node(node)
                         current_removed += 1
 
-                stats = get_stats(G_copy)
-                all_lcc[fraction].append(stats["lcc_norm"])
-                all_diameter[fraction].append(stats["diameter"])
+                # Calculate LCC size normalized by N0 (original size), not current size
+                lcc_nodes = get_lcc(G_copy)
+                lcc_size_normalized = len(lcc_nodes) / N0 if N0 > 0 else 0.0
+                diameter_val = diameter(G_copy)
+                
+                all_lcc[fraction].append(lcc_size_normalized)
+                all_diameter[fraction].append(diameter_val)
 
         # Lấy trung bình
         for fraction in fractions:
@@ -200,9 +208,13 @@ def simulate_attack(
                     G_copy.remove_node(node)
                     current_removed += 1
 
-            stats = get_stats(G_copy)
+            # Calculate LCC size normalized by N0 (original size), not current size
+            lcc_nodes = get_lcc(G_copy)
+            lcc_size_normalized = len(lcc_nodes) / N0 if N0 > 0 else 0.0
+            diameter_val = diameter(G_copy)
+            
             results["fraction_removed"].append(fraction)
-            results["relative_lcc_size"].append(stats["lcc_norm"])
-            results["diameter"].append(stats["diameter"])
+            results["relative_lcc_size"].append(lcc_size_normalized)
+            results["diameter"].append(diameter_val)
 
     return results

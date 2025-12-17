@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import axios from 'axios'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // Fix Leaflet icons
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -96,6 +96,9 @@ function App() {
   const [caseDst, setCaseDst] = useState<string>('SGN')
   const [caseWithDefense, setCaseWithDefense] = useState<boolean>(true)
   const [caseResult, setCaseResult] = useState<any | null>(null)
+  const [caseDefenseMethod, setCaseDefenseMethod] = useState<string>('TER')
+  const [attackSimResult, setAttackSimResult] = useState<any | null>(null)
+  const [showAttackSimModal, setShowAttackSimModal] = useState<boolean>(false)
 
   // Overview / report panel
   const [showOverview, setShowOverview] = useState<boolean>(false)
@@ -479,6 +482,26 @@ function App() {
       setCaseResult(res.data)
     } catch (error: any) {
       console.error('Error running route case study:', error)
+      alert('Error: ' + (error.response?.data?.detail || error.message))
+    } finally {
+      setLoadingAnalysis(false)
+    }
+  }
+
+  async function runAttackSimulation() {
+    setLoadingAnalysis(true)
+    try {
+      const params: any = {
+        src_iata: caseSrc,
+        dst_iata: caseDst,
+        with_defense: caseWithDefense,
+        defense_method: caseDefenseMethod
+      }
+      const res = await API.get('/case/route-attack-simulation', { params })
+      console.log('Attack Simulation Response:', res.data)
+      setAttackSimResult(res.data)
+    } catch (error: any) {
+      console.error('Error running attack simulation:', error)
       alert('Error: ' + (error.response?.data?.detail || error.message))
     } finally {
       setLoadingAnalysis(false)
@@ -1198,27 +1221,58 @@ function App() {
                 style={{ marginRight: '6px' }}
               />
               <label htmlFor="case-with-defense" style={{ fontSize: '11px', color: '#666' }}>
-                Compare with TER Defense (Effective Resistance - thêm cạnh backup)
+                Compare with Defense
               </label>
             </div>
-            <button
-              onClick={() => runRouteCaseStudy()}
-              disabled={loadingAnalysis}
-              style={{
-                width: '100%',
-                padding: '8px',
-                background: '#9933cc',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: loadingAnalysis ? 'not-allowed' : 'pointer',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-            >
-              {loadingAnalysis ? 'Running...' : 'Analyze Route'}
-            </button>
+            {caseWithDefense && (
+              <div style={{ marginBottom: '8px' }}>
+                <label style={{ fontSize: '11px', display: 'block', marginBottom: '3px', color: '#666' }}>Defense Method:</label>
+                <select
+                  value={caseDefenseMethod}
+                  onChange={(e) => setCaseDefenseMethod(e.target.value)}
+                  style={{ width: '100%', padding: '5px', fontSize: '12px', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  <option value="TER">TER Defense (Effective Resistance)</option>
+                  <option value="Schneider">Schneider Defense (Edge Swapping)</option>
+                </select>
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+              <button
+                onClick={() => runRouteCaseStudy()}
+                disabled={loadingAnalysis}
+                style={{
+                  padding: '8px',
+                  background: '#9933cc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: loadingAnalysis ? 'not-allowed' : 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+              >
+                {loadingAnalysis ? 'Running...' : 'Analyze Route'}
+              </button>
+              <button
+                onClick={() => runAttackSimulation()}
+                disabled={loadingAnalysis}
+                style={{
+                  padding: '8px',
+                  background: '#ff6600',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: loadingAnalysis ? 'not-allowed' : 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+              >
+                {loadingAnalysis ? 'Running...' : 'Attack Simulation'}
+              </button>
+            </div>
 
             {/* Kết quả tóm tắt ngay dưới nút để dễ nhìn */}
             {caseResult && (
@@ -1998,6 +2052,199 @@ function App() {
               )}
             </div>
           )}
+
+          {/* Route Case Study Result */}
+          {caseResult && (
+            <div style={{ 
+              marginTop: '30px', 
+              padding: '15px', 
+              background: 'white', 
+              borderRadius: '8px',
+              border: '2px solid #9933cc',
+              boxShadow: '0 2px 6px rgba(153,51,204,0.15)'
+            }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: 'bold', color: '#9933cc' }}>
+                📍 Route Case Study: {caseResult.src_iata} → {caseResult.dst_iata}
+              </h4>
+              <div style={{ fontSize: '12px', color: '#444', marginBottom: '12px' }}>
+                Phân tích số đường đi ngắn nhất (unweighted) giữa hai sân bay, trước và sau khi thêm <strong>TER Defense</strong> (Effective Resistance - thêm cạnh backup).
+              </div>
+              <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                <div style={{ flex: 1, background: '#f9f9f9', padding: '10px', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
+                  <strong style={{ color: '#333' }}>Baseline (không defense)</strong>
+                  {caseResult.baseline?.connected ? (
+                    <>
+                      <div style={{ marginTop: '6px' }}>Connected: <strong style={{ color: '#00aa00' }}>YES</strong></div>
+                      <div>Hops (số chặng): <strong>{caseResult.baseline.hops}</strong></div>
+                      <div>Số đường đi ngắn nhất: <strong>{caseResult.baseline.num_shortest_paths}</strong></div>
+                      <div style={{ marginTop: '4px', fontSize: '11px', color: '#666' }}>Đường đi: <span>{(caseResult.baseline.path_iata || []).join(' → ')}</span></div>
+                    </>
+                  ) : (
+                    <div style={{ marginTop: '6px' }}>Connected: <strong style={{ color: '#cc0000' }}>NO</strong></div>
+                  )}
+                </div>
+                {caseResult.with_defense && (
+                  <div style={{ flex: 1, background: '#f0f8f0', padding: '10px', borderRadius: '6px', border: '1px solid #c0e0c0' }}>
+                    <strong style={{ color: '#00aa66' }}>With TER Defense (reinforced)</strong>
+                    <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>
+                      Phương pháp: Effective Resistance - thêm cạnh backup
+                    </div>
+                    {caseResult.with_defense?.connected ? (
+                      <>
+                        <div style={{ marginTop: '6px' }}>Connected: <strong style={{ color: '#00aa00' }}>YES</strong></div>
+                        <div>Hops (số chặng): <strong>{caseResult.with_defense.hops}</strong></div>
+                        <div>Số đường đi ngắn nhất: <strong>{caseResult.with_defense.num_shortest_paths}</strong></div>
+                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#666' }}>Đường đi: <span>{(caseResult.with_defense.path_iata || []).join(' → ')}</span></div>
+                      </>
+                    ) : (
+                      <div style={{ marginTop: '6px' }}>Connected: <strong style={{ color: '#cc0000' }}>NO</strong></div>
+                    )}
+                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#666' }}>
+                      Số cạnh backup thêm: <strong>{caseResult.added_edges}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: '10px', fontSize: '11px', color: '#666', padding: '8px', background: '#fff8f0', borderRadius: '4px' }}>
+                <strong>Gợi ý đọc</strong>:{' '}
+                Nếu <em>số đường đi ngắn nhất</em> tăng sau defense, mạng có nhiều lựa chọn tuyến hơn khi một số hub bị tấn công;{' '}
+                nếu mạng bị ngắt kết nối (Connected = NO), đây là kịch bản failure nghiêm trọng.
+              </div>
+            </div>
+          )}
+
+          {/* Attack Simulation Results */}
+          {attackSimResult && (
+            <div style={{ 
+              marginTop: '30px', 
+              padding: '15px', 
+              background: 'white', 
+              borderRadius: '8px',
+              border: '2px solid #ff6600',
+              boxShadow: '0 2px 6px rgba(255,102,0,0.15)'
+            }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: 'bold', color: '#ff6600' }}>
+                🎯 Attack Simulation: {attackSimResult.src_iata} → {attackSimResult.dst_iata}
+              </h4>
+              <div style={{ fontSize: '11px', color: '#666', marginBottom: '12px' }}>
+                <div>
+                  <strong>Baseline:</strong> {attackSimResult.baseline_original?.path_iata?.join(' → ') || 'N/A'} 
+                  ({attackSimResult.baseline_original?.distance_km?.toFixed(0) || 'N/A'} km)
+                </div>
+                {attackSimResult.baseline_defended && (
+                  <div>
+                    <strong>Defended ({attackSimResult.defense_method}):</strong> {attackSimResult.baseline_defended?.path_iata?.join(' → ') || 'N/A'}
+                    ({attackSimResult.baseline_defended?.distance_km?.toFixed(0) || 'N/A'} km)
+                  </div>
+                )}
+                {attackSimResult.transit_nodes && attackSimResult.transit_nodes.length > 0 && (
+                  <div style={{ marginTop: '4px' }}>
+                    <strong>Transit Nodes:</strong> {attackSimResult.transit_nodes.join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {/* Compact Bar Chart */}
+              {attackSimResult.chart_data && attackSimResult.chart_data.length > 0 && (
+                <div 
+                  onClick={() => setShowAttackSimModal(true)}
+                  style={{ cursor: 'pointer', marginTop: '8px' }}
+                >
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart 
+                      data={attackSimResult.chart_data.map((d: any) => {
+                        const allValues = attackSimResult.chart_data
+                          .filter((dd: any) => (dd.original_connected && dd.original_km) || (dd.defended_connected && dd.defended_km))
+                          .map((dd: any) => Math.max(dd.original_km || 0, dd.defended_km || 0));
+                        const maxVal = allValues.length > 0 ? Math.max(...allValues) : 10000;
+                        return {
+                          scenario: d.scenario,
+                          'Original': d.original_connected ? (d.original_km || 0) : null,
+                          'Defended': d.defended_connected ? (d.defended_km || 0) : null,
+                          'Original_X': !d.original_connected ? maxVal * 1.12 : null,
+                          'Defended_X': d.defended_connected === false ? maxVal * 1.12 : null
+                        };
+                      })}
+                      margin={{ top: 40, right: 20, left: 10, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="scenario" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={70}
+                        interval={0}
+                        tick={{ fontSize: 10 }}
+                      />
+                      <YAxis 
+                        domain={[0, 'dataMax + 2000']}
+                        tick={{ fontSize: 10 }}
+                      />
+                      <Tooltip 
+                        formatter={(value: any, name: string) => {
+                          if (name.includes('_X')) return null;
+                          if (value === null || value === undefined) return ['DISCONNECTED', name];
+                          return [`${value?.toFixed(0)} km`, name];
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      <Bar dataKey="Original" fill="#ff9999" name="Original" />
+                      <Bar dataKey="Defended" fill="#66b3ff" name="Defended" />
+                      <Bar 
+                        dataKey="Original_X" 
+                        fill="transparent" 
+                        name="" 
+                        isAnimationActive={false}
+                        label={(props: any) => {
+                          if (props.value) {
+                            return (
+                              <text 
+                                x={props.x + props.width / 2} 
+                                y={props.y - 5} 
+                                fill="red" 
+                                fontSize={16} 
+                                fontWeight="bold" 
+                                textAnchor="middle"
+                              >
+                                ✗
+                              </text>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar 
+                        dataKey="Defended_X" 
+                        fill="transparent" 
+                        name="" 
+                        isAnimationActive={false}
+                        label={(props: any) => {
+                          if (props.value) {
+                            return (
+                              <text 
+                                x={props.x + props.width / 2} 
+                                y={props.y - 5} 
+                                fill="red" 
+                                fontSize={16} 
+                                fontWeight="bold" 
+                                textAnchor="middle"
+                              >
+                                ✗
+                              </text>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                    Click để xem chi tiết
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2152,23 +2399,48 @@ function App() {
             </div>
           </div>
           <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-                {redundancySuggestions.map((sug, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: '12px',
-                      marginBottom: '8px',
-                      background: idx < 3 ? '#e8f5e9' : '#f9f9f9',
-                      border: idx < 3 ? '2px solid #4caf50' : '1px solid #ddd',
-                      borderRadius: '5px',
-                      fontSize: '13px'
-                    }}
-                  >
-            {idx < 3 && (
-              <div style={{ fontSize: '11px', color: '#4caf50', fontWeight: 'bold', marginBottom: '5px' }}>
-                ⭐ Top {idx + 1} Priority
+            {redundancySuggestions.map((sug, idx) => (
+              <div
+                key={idx}
+                style={{
+                  padding: '12px',
+                  marginBottom: '8px',
+                  background: idx < 3 ? '#e8f5e9' : '#f9f9f9',
+                  border: idx < 3 ? '2px solid #4caf50' : '1px solid #ddd',
+                  borderRadius: '5px',
+                  fontSize: '13px'
+                }}
+              >
+                {idx < 3 && (
+                  <div style={{ fontSize: '11px', color: '#4caf50', fontWeight: 'bold', marginBottom: '5px' }}>
+                    ⭐ Top {idx + 1} Priority
+                  </div>
+                )}
+                <div style={{ fontWeight: 'bold', marginBottom: '5px', fontSize: '14px' }}>
+                  <span style={{ color: '#0066cc' }}>{sug.source_name}</span> ({sug.source_iata})
+                </div>
+                <div style={{ marginBottom: '5px', fontSize: '14px' }}>
+                  → <span style={{ color: '#0066cc', fontWeight: 'bold' }}>{sug.target_name}</span> ({sug.target_iata})
+                </div>
+                <div style={{ fontSize: '12px', color: '#666', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #eee' }}>
+                  <div>📏 Distance: <strong>{sug.distance_km?.toFixed(0)} km</strong></div>
+                  {sug.lcc_gain > 0 && (
+                    <div>📈 LCC Gain: <strong style={{ color: '#4caf50' }}>+{sug.lcc_gain?.toFixed(4)}</strong></div>
+                  )}
+                  {sug.aspl_gain > 0 && (
+                    <div>📉 ASPL Reduction: <strong style={{ color: '#4caf50' }}>-{sug.aspl_gain?.toFixed(4)}</strong></div>
+                  )}
+                  {sug.score && (
+                    <div style={{ marginTop: '5px', fontSize: '11px', color: '#999' }}>
+                      Score: {sug.score?.toFixed(2)}
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Overview / Report Panel */}
       {showOverview && (
@@ -2258,83 +2530,234 @@ function App() {
             </div>
           )}
 
-          {/* Route Case Study Result */}
-          {caseResult && (
-            <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '2px solid #eee' }}>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#9933cc' }}>
-                Route Case Study: {caseResult.src_iata} → {caseResult.dst_iata}
-              </h4>
-              <div style={{ fontSize: '12px', color: '#444', marginBottom: '8px' }}>
-                Phân tích số đường đi ngắn nhất (unweighted) giữa hai sân bay, trước và sau khi thêm <strong>TER Defense</strong> (Effective Resistance - thêm cạnh backup).
-              </div>
-              <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
-                <div style={{ flex: 1, background: 'white', padding: '10px', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
-                  <strong style={{ color: '#333' }}>Baseline (không defense)</strong>
-                  {caseResult.baseline?.connected ? (
-                    <>
-                      <div>Connected: <strong style={{ color: '#00aa00' }}>YES</strong></div>
-                      <div>Hops (số chặng): <strong>{caseResult.baseline.hops}</strong></div>
-                      <div>Số đường đi ngắn nhất: <strong>{caseResult.baseline.num_shortest_paths}</strong></div>
-                      <div>Đường đi ví dụ: <span>{(caseResult.baseline.path_iata || []).join(' → ')}</span></div>
-                    </>
-                  ) : (
-                    <div>Connected: <strong style={{ color: '#cc0000' }}>NO</strong></div>
+
+          {/* Attack Simulation Modal */}
+          {showAttackSimModal && attackSimResult && (
+            <div
+              onClick={() => setShowAttackSimModal(false)}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
+                background: 'rgba(0,0,0,0.75)',
+                zIndex: 6000,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                cursor: 'pointer',
+                padding: '20px'
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: 'white',
+                  borderRadius: '12px',
+                  padding: '30px',
+                  width: '95vw',
+                  maxWidth: '1400px',
+                  maxHeight: '95vh',
+                  overflowY: 'auto',
+                  boxShadow: '0 10px 50px rgba(0,0,0,0.5)',
+                  cursor: 'default'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '2px solid #ff6600', paddingBottom: '15px' }}>
+                  <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: '#ff6600' }}>
+                    🎯 Attack Simulation Report: {attackSimResult.src_iata} → {attackSimResult.dst_iata}
+                  </h2>
+                  <button
+                    onClick={() => setShowAttackSimModal(false)}
+                    style={{
+                      background: '#f0f0f0',
+                      border: '1px solid #ccc',
+                      borderRadius: '5px',
+                      padding: '8px 15px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {/* Baseline Info */}
+                <div style={{ 
+                  fontSize: '14px', 
+                  color: '#333', 
+                  marginBottom: '25px',
+                  padding: '15px',
+                  background: '#fff8f0',
+                  borderRadius: '8px',
+                  border: '1px solid #ffe0b3'
+                }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 'bold', color: '#ff6600' }}>
+                    📍 Baseline Route Information
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <div>
+                      <div style={{ marginBottom: '8px' }}>
+                        <strong>Original Route:</strong> {attackSimResult.baseline_original?.path_iata?.join(' → ') || 'N/A'}
+                      </div>
+                      <div style={{ marginBottom: '8px' }}>
+                        <strong>Distance:</strong> <span style={{ color: '#ff6600', fontWeight: 'bold' }}>
+                          {attackSimResult.baseline_original?.distance_km?.toFixed(2) || 'N/A'} km
+                        </span>
+                      </div>
+                      <div>
+                        <strong>Hops:</strong> {attackSimResult.baseline_original?.hops || 'N/A'}
+                      </div>
+                    </div>
+                    {attackSimResult.baseline_defended && (
+                      <div>
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Defended Route ({attackSimResult.defense_method}):</strong> {attackSimResult.baseline_defended?.path_iata?.join(' → ') || 'N/A'}
+                        </div>
+                        <div style={{ marginBottom: '8px' }}>
+                          <strong>Distance:</strong> <span style={{ color: '#66b3ff', fontWeight: 'bold' }}>
+                            {attackSimResult.baseline_defended?.distance_km?.toFixed(2) || 'N/A'} km
+                          </span>
+                        </div>
+                        <div>
+                          <strong>Hops:</strong> {attackSimResult.baseline_defended?.hops || 'N/A'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {attackSimResult.transit_nodes && attackSimResult.transit_nodes.length > 0 && (
+                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ffe0b3' }}>
+                      <strong>Critical Transit Nodes:</strong> {attackSimResult.transit_nodes.join(', ')}
+                    </div>
                   )}
                 </div>
-                {caseResult.with_defense && (
-                  <div style={{ flex: 1, background: 'white', padding: '10px', borderRadius: '6px', border: '1px solid #e0e0e0' }}>
-                    <strong style={{ color: '#00aa66' }}>With TER Defense (reinforced)</strong>
-                    <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>
-                      Phương pháp: Effective Resistance - thêm cạnh backup
+
+                {/* Bar Chart */}
+                {attackSimResult.chart_data && attackSimResult.chart_data.length > 0 && (
+                  <div style={{ marginBottom: '30px' }}>
+                    <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', fontWeight: 'bold', color: '#333' }}>
+                      📊 Path Length Comparison
+                    </h3>
+                    <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '8px' }}>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart 
+                          data={attackSimResult.chart_data.map((d: any) => ({
+                            scenario: d.scenario,
+                            'Original': d.original_connected ? (d.original_km || 0) : null,
+                            'Defended': d.defended_connected ? (d.defended_km || 0) : null
+                          }))}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis 
+                            dataKey="scenario" 
+                            angle={-45}
+                            textAnchor="end"
+                            height={120}
+                            label={{ value: 'Attack Scenario', position: 'insideBottom', offset: -5 }}
+                            interval={0}
+                          />
+                          <YAxis 
+                            label={{ value: 'Path Length (km)', angle: -90, position: 'insideLeft' }}
+                            domain={[0, 'dataMax + 2000']}
+                          />
+                          <Tooltip 
+                            formatter={(value: any, name: string) => {
+                              if (value === null || value === undefined) return ['DISCONNECTED', name];
+                              return [`${value?.toFixed(2)} km`, name];
+                            }}
+                            labelFormatter={(label) => `Scenario: ${label}`}
+                            contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #ccc', borderRadius: '4px' }}
+                          />
+                          <Legend />
+                          <Bar dataKey="Original" fill="#ff9999" name="Original" />
+                          <Bar dataKey="Defended" fill="#66b3ff" name="Defended" />
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
-                    {caseResult.with_defense?.connected ? (
-                      <>
-                        <div>Connected: <strong style={{ color: '#00aa00' }}>YES</strong></div>
-                        <div>Hops (số chặng): <strong>{caseResult.with_defense.hops}</strong></div>
-                        <div>Số đường đi ngắn nhất: <strong>{caseResult.with_defense.num_shortest_paths}</strong></div>
-                        <div>Đường đi ví dụ: <span>{(caseResult.with_defense.path_iata || []).join(' → ')}</span></div>
-                      </>
-                    ) : (
-                      <div>Connected: <strong style={{ color: '#cc0000' }}>NO</strong></div>
-                    )}
-                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#666' }}>
-                      Số cạnh backup thêm: <strong>{caseResult.added_edges}</strong>
+                    <div style={{ marginTop: '15px', fontSize: '12px', color: '#666', textAlign: 'center' }}>
+                      <strong>Note:</strong> Disconnected scenarios (no path found) are shown as empty bars. 
+                      Original = Light Red, Defended = Light Blue
+                    </div>
+                  </div>
+                )}
+
+                {/* Detailed Results Table */}
+                {attackSimResult.attack_results && attackSimResult.attack_results.length > 0 && (
+                  <div>
+                    <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', fontWeight: 'bold', color: '#333' }}>
+                      📋 Detailed Attack Results
+                    </h3>
+                    <div style={{ 
+                      border: '1px solid #ddd',
+                      borderRadius: '8px',
+                      overflow: 'hidden'
+                    }}>
+                      <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#ff6600', color: 'white' }}>
+                            <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #cc5500' }}>Scenario</th>
+                            <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #cc5500' }}>Original (km)</th>
+                            {attackSimResult.defense_method && (
+                              <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #cc5500' }}>Defended (km)</th>
+                            )}
+                            <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #cc5500' }}>Status</th>
+                            <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #cc5500' }}>Route</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attackSimResult.attack_results.map((result: any, idx: number) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #eee', background: idx % 2 === 0 ? 'white' : '#f9f9f9' }}>
+                              <td style={{ padding: '10px', fontWeight: 'bold' }}>{result.scenario}</td>
+                              <td style={{ padding: '10px', textAlign: 'right' }}>
+                                {result.original.connected ? (
+                                  <span style={{ color: '#ff6600', fontWeight: 'bold' }}>
+                                    {result.original.distance_km?.toFixed(2)} km
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'red', fontWeight: 'bold' }}>DISCONNECTED</span>
+                                )}
+                              </td>
+                              {attackSimResult.defense_method && (
+                                <td style={{ padding: '10px', textAlign: 'right' }}>
+                                  {result.defended?.connected ? (
+                                    <span style={{ color: '#66b3ff', fontWeight: 'bold' }}>
+                                      {result.defended.distance_km?.toFixed(2)} km
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: 'red', fontWeight: 'bold' }}>DISCONNECTED</span>
+                                  )}
+                                </td>
+                              )}
+                              <td style={{ padding: '10px', textAlign: 'center' }}>
+                                <span style={{ color: result.original.connected ? '#00aa00' : 'red', fontSize: '16px', fontWeight: 'bold' }}>
+                                  {result.original.connected ? '✓' : '✗'}
+                                </span>
+                                {attackSimResult.defense_method && (
+                                  <span style={{ marginLeft: '8px', color: result.defended?.connected ? '#00aa00' : 'red', fontSize: '16px', fontWeight: 'bold' }}>
+                                    {result.defended?.connected ? '✓' : '✗'}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '10px', fontSize: '11px', color: '#666' }}>
+                                {result.original.connected ? (
+                                  <span>{result.original.path_iata?.join(' → ') || 'N/A'}</span>
+                                ) : (
+                                  <span style={{ color: 'red', fontStyle: 'italic' }}>No path</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
               </div>
-              <div style={{ marginTop: '8px', fontSize: '11px', color: '#666' }}>
-                <strong>Gợi ý đọc</strong>:{' '}
-                Nếu <em>số đường đi ngắn nhất</em> tăng sau defense, mạng có nhiều lựa chọn tuyến hơn khi một số hub bị tấn công;{' '}
-                nếu mạng bị ngắt kết nối (Connected = NO), đây là kịch bản failure nghiêm trọng.
-              </div>
             </div>
           )}
-            <div style={{ fontWeight: 'bold', marginBottom: '5px', fontSize: '14px' }}>
-              <span style={{ color: '#0066cc' }}>{sug.source_name}</span> ({sug.source_iata})
-            </div>
-            <div style={{ marginBottom: '5px', fontSize: '14px' }}>
-              → <span style={{ color: '#0066cc', fontWeight: 'bold' }}>{sug.target_name}</span> ({sug.target_iata})
-            </div>
-            <div style={{ fontSize: '12px', color: '#666', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #eee' }}>
-              <div>📏 Distance: <strong>{sug.distance_km?.toFixed(0)} km</strong></div>
-              {sug.lcc_gain > 0 && (
-                <div>📈 LCC Gain: <strong style={{ color: '#4caf50' }}>+{sug.lcc_gain?.toFixed(4)}</strong></div>
-              )}
-              {sug.aspl_gain > 0 && (
-                <div>📉 ASPL Reduction: <strong style={{ color: '#4caf50' }}>-{sug.aspl_gain?.toFixed(4)}</strong></div>
-              )}
-              {sug.score && (
-                <div style={{ marginTop: '5px', fontSize: '11px', color: '#999' }}>
-                  Score: {sug.score?.toFixed(2)}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
 
       {/* Floating button for removed panel */}
       {!showRemovedPanel && removedItems.length > 0 && (
@@ -2411,28 +2834,56 @@ function App() {
               </button>
             </div>
             <ResponsiveContainer width="100%" height={600}>
-              <LineChart data={zoomedChart.data}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey={zoomedChart.config.xKey} 
-                  label={{ value: zoomedChart.config.xLabel, position: 'insideBottom', offset: -5 }} 
-                />
-                <YAxis 
-                  label={{ value: zoomedChart.config.yLabel, angle: -90, position: 'insideLeft' }} 
-                />
-                <Tooltip />
-                <Legend />
-                {zoomedChart.config.lines.map((line: any) => (
-                  <Line 
-                    key={line.key}
-                    type="monotone" 
-                    dataKey={line.key} 
-                    stroke={line.stroke} 
-                    strokeWidth={3} 
-                    dot={{ r: 4 }} 
+              {zoomedChart.config.chartType === 'bar' ? (
+                <BarChart data={zoomedChart.data}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey={zoomedChart.config.xKey} 
+                    angle={-45}
+                    textAnchor="end"
+                    height={100}
+                    label={{ value: zoomedChart.config.xLabel, position: 'insideBottom', offset: -5 }} 
                   />
-                ))}
-              </LineChart>
+                  <YAxis label={{ value: zoomedChart.config.yLabel, angle: -90, position: 'insideLeft' }} />
+                  <Tooltip 
+                    formatter={(value: any) => {
+                      if (value === 99999 || value === null) return 'DISCONNECTED';
+                      return `${value?.toFixed(2)} km`;
+                    }}
+                  />
+                  <Legend />
+                  {zoomedChart.config.lines.map((line: any) => (
+                    <Bar 
+                      key={line.key} 
+                      dataKey={line.key} 
+                      fill={line.stroke} 
+                    />
+                  ))}
+                </BarChart>
+              ) : (
+                <LineChart data={zoomedChart.data}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey={zoomedChart.config.xKey} 
+                    label={{ value: zoomedChart.config.xLabel, position: 'insideBottom', offset: -5 }} 
+                  />
+                  <YAxis 
+                    label={{ value: zoomedChart.config.yLabel, angle: -90, position: 'insideLeft' }} 
+                  />
+                  <Tooltip />
+                  <Legend />
+                  {zoomedChart.config.lines.map((line: any) => (
+                    <Line 
+                      key={line.key}
+                      type="monotone" 
+                      dataKey={line.key} 
+                      stroke={line.stroke} 
+                      strokeWidth={3} 
+                      dot={{ r: 4 }} 
+                    />
+                  ))}
+                </LineChart>
+              )}
             </ResponsiveContainer>
           </div>
         </div>

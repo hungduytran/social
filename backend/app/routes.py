@@ -2,6 +2,9 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List
+
+import networkx as nx  # Needed for type hints and graph operations in helper functions
+
 from app.state import app_state
 from app.metrics import get_stats
 from app.attacks import (
@@ -11,7 +14,11 @@ from app.attacks import (
     betweenness_targeted_attack,
     pagerank_targeted_attack,
 )
-from app.defense import reinforce_graph, add_edges_by_effective_resistance, reinforce_graph_schneider
+from app.defense import (
+    reinforce_graph,
+    add_edges_by_effective_resistance,
+    reinforce_graph_schneider,
+)
 from app.geojson import to_geojson
 from app.redundancy import suggest_redundancy
 from app.filter import filter_graph_by_bbox
@@ -1025,5 +1032,242 @@ async def route_metrics(
         "baseline": baseline,
         "with_defense": defense_metrics,
         "added_edges": added_edges,
+    }
+
+
+def _ensure_edge_weights(G: nx.Graph) -> nx.Graph:
+    """
+    Đảm bảo tất cả edges có trọng số 'weight' (khoảng cách km).
+    Nếu chưa có, tính từ distance_km hoặc từ tọa độ.
+    """
+    from geopy.distance import great_circle
+    
+    for u, v, data in G.edges(data=True):
+        if "weight" not in data:
+            # Thử dùng distance_km nếu có
+            if "distance_km" in data and data["distance_km"] is not None:
+                data["weight"] = float(data["distance_km"])
+            else:
+                # Tính từ tọa độ
+                u_data = G.nodes[u]
+                v_data = G.nodes[v]
+                if "lat" in u_data and "lon" in u_data and "lat" in v_data and "lon" in v_data:
+                    try:
+                        dist = great_circle(
+                            (u_data["lat"], u_data["lon"]),
+                            (v_data["lat"], v_data["lon"])
+                        ).kilometers
+                        data["weight"] = dist
+                    except:
+                        data["weight"] = 99999.0
+                else:
+                    data["weight"] = 99999.0
+    return G
+
+
+@router.get("/case/route-attack-simulation")
+async def route_attack_simulation(
+    src_iata: str = Query(..., description="Source airport IATA code"),
+    dst_iata: str = Query(..., description="Destination airport IATA code"),
+    with_defense: bool = Query(True, description="Also evaluate on defended graph"),
+    defense_method: str = Query("TER", description="Defense method: TER or Schneider"),
+):
+    """
+    Adaptive attack simulation: Tấn công từng node trên đường đi và so sánh Original vs Defended.
+    
+    Trả về:
+    - Baseline route (không tấn công)
+    - Kết quả khi tấn công từng transit node
+    - Kết quả khi tấn công combo nodes
+    - Bar chart data để vẽ biểu đồ so sánh
+    """
+    import networkx as nx
+    
+    if app_state.graph is None:
+        raise HTTPException(400, "Graph not loaded")
+    G_full = app_state.get_active_graph()
+    if G_full is None:
+        raise HTTPException(400, "Graph not loaded")
+    
+    # Đảm bảo edges có weight
+    G_full = _ensure_edge_weights(G_full.copy())
+    
+    # Tìm node id theo IATA
+    def find_airport_id(iata: str) -> int:
+        iata_up = iata.strip().upper()
+        for node_id, data in G_full.nodes(data=True):
+            if str(data.get("iata", "")).upper() == iata_up:
+                return int(node_id)
+        raise HTTPException(404, f"Airport with IATA '{iata}' not found")
+    
+    try:
+        src_id = find_airport_id(src_iata)
+        dst_id = find_airport_id(dst_iata)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Error looking up airports: {e}")
+    
+    # Tìm đường đi ban đầu
+    try:
+        path = nx.shortest_path(G_full, source=src_id, target=dst_id, weight="weight")
+        baseline_distance = nx.shortest_path_length(G_full, source=src_id, target=dst_id, weight="weight")
+        path_iata = [G_full.nodes[n].get("iata", str(n)) for n in path]
+    except nx.NetworkXNoPath:
+        raise HTTPException(400, f"No path found between {src_iata} and {dst_iata}")
+    
+    # Lấy các transit nodes (bỏ src và dst)
+    transit_ids = path[1:-1] if len(path) > 2 else []
+    transit_iata = [G_full.nodes[nid].get("iata", str(nid)) for nid in transit_ids]
+    
+    # Chuẩn bị defended graph nếu cần
+    G_def = None
+    if with_defense:
+        from app.metrics import get_lcc
+        lcc_nodes = get_lcc(G_full)
+        G_lcc = G_full.subgraph(lcc_nodes).copy()
+        
+        if src_id not in G_lcc or dst_id not in G_lcc:
+            raise HTTPException(400, f"Airports {src_iata} and/or {dst_iata} are not in the largest connected component")
+        
+        if defense_method == "TER":
+            G_def, _ = add_edges_by_effective_resistance(
+                G_lcc,
+                k=10,
+                max_candidates=2000,
+                max_distance_km=3000,
+                seed=123
+            )
+        elif defense_method == "Schneider":
+            G_def, _ = reinforce_graph_schneider(
+                G_lcc,
+                max_trials=10000,
+                patience=3000,
+                seed=123
+            )
+        else:
+            raise HTTPException(400, f"Unknown defense method: {defense_method}")
+        
+        G_def = _ensure_edge_weights(G_def)
+    
+    # Hàm tính path length sau khi tấn công
+    def attack_and_measure(G, attack_node_ids):
+        G_attack = G.copy()
+        G_attack.remove_nodes_from(attack_node_ids)
+        try:
+            new_path = nx.shortest_path(G_attack, source=src_id, target=dst_id, weight="weight")
+            new_dist = nx.shortest_path_length(G_attack, source=src_id, target=dst_id, weight="weight")
+            new_path_iata = [G.nodes[n].get("iata", str(n)) for n in new_path]
+            return {
+                "connected": True,
+                "distance_km": new_dist,
+                "path_iata": new_path_iata,
+                "hops": len(new_path) - 1
+            }
+        except nx.NetworkXNoPath:
+            return {
+                "connected": False,
+                "distance_km": None,
+                "path_iata": [],
+                "hops": None
+            }
+    
+    # Baseline (không tấn công)
+    baseline_original = {
+        "connected": True,
+        "distance_km": baseline_distance,
+        "path_iata": path_iata,
+        "hops": len(path) - 1
+    }
+    
+    baseline_defended = None
+    if G_def:
+        try:
+            def_path = nx.shortest_path(G_def, source=src_id, target=dst_id, weight="weight")
+            def_dist = nx.shortest_path_length(G_def, source=src_id, target=dst_id, weight="weight")
+            baseline_defended = {
+                "connected": True,
+                "distance_km": def_dist,
+                "path_iata": [G_def.nodes[n].get("iata", str(n)) for n in def_path],
+                "hops": len(def_path) - 1
+            }
+        except nx.NetworkXNoPath:
+            baseline_defended = {
+                "connected": False,
+                "distance_km": None,
+                "path_iata": [],
+                "hops": None
+            }
+    
+    # Kết quả tấn công từng node
+    attack_results = []
+    
+    # Scenario 0: Baseline
+    attack_results.append({
+        "scenario": "Baseline",
+        "target_iata": None,
+        "target_ids": [],
+        "original": baseline_original,
+        "defended": baseline_defended
+    })
+    
+    # Scenario 1..N: Tấn công từng transit node
+    for transit_id, transit_code in zip(transit_ids, transit_iata):
+        orig_result = attack_and_measure(G_full, [transit_id])
+        def_result = None
+        if G_def:
+            def_result = attack_and_measure(G_def, [transit_id])
+        
+        attack_results.append({
+            "scenario": f"Remove {transit_code}",
+            "target_iata": transit_code,
+            "target_ids": [transit_id],
+            "original": orig_result,
+            "defended": def_result
+        })
+    
+    # Scenario Combo: Tấn công nhiều nodes cùng lúc (top 2 transit nodes)
+    if len(transit_ids) >= 2:
+        combo_ids = transit_ids[:2]
+        combo_iata = transit_iata[:2]
+        orig_result = attack_and_measure(G_full, combo_ids)
+        def_result = None
+        if G_def:
+            def_result = attack_and_measure(G_def, combo_ids)
+        
+        attack_results.append({
+            "scenario": "Combo Attack",
+            "target_iata": ", ".join(combo_iata),
+            "target_ids": combo_ids,
+            "original": orig_result,
+            "defended": def_result
+        })
+    
+    # Chuẩn bị data cho bar chart
+    chart_data = []
+    labels = []
+    for result in attack_results:
+        labels.append(result["scenario"])
+        orig_dist = result["original"]["distance_km"] if result["original"]["connected"] else None
+        def_dist = result["defended"]["distance_km"] if result["defended"] and result["defended"]["connected"] else None
+        
+        chart_data.append({
+            "scenario": result["scenario"],
+            "original_km": orig_dist,
+            "defended_km": def_dist,
+            "original_connected": result["original"]["connected"],
+            "defended_connected": result["defended"]["connected"] if result["defended"] else None
+        })
+    
+    return {
+        "src_iata": src_iata.upper(),
+        "dst_iata": dst_iata.upper(),
+        "baseline_original": baseline_original,
+        "baseline_defended": baseline_defended,
+        "transit_nodes": transit_iata,
+        "attack_results": attack_results,
+        "chart_data": chart_data,
+        "labels": labels,
+        "defense_method": defense_method if with_defense else None
     }
 

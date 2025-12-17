@@ -4,7 +4,13 @@ from pydantic import BaseModel
 from typing import Optional, List
 from app.state import app_state
 from app.metrics import get_stats
-from app.attacks import simulate_attack, random_attack, degree_targeted_attack, betweenness_targeted_attack
+from app.attacks import (
+    simulate_attack,
+    random_attack,
+    degree_targeted_attack,
+    betweenness_targeted_attack,
+    pagerank_targeted_attack,
+)
 from app.defense import reinforce_graph
 from app.geojson import to_geojson
 from app.redundancy import suggest_redundancy
@@ -386,12 +392,15 @@ async def get_attack_impact(
     # Define fractions: 0 to 0.5 in steps of 0.05 (11 points)
     fractions = [round(i * 0.05, 2) for i in range(11)]
     
-    # Run all three attack strategies
+    # Run main attack strategies
     print("Running random_attack...")
     random_result = simulate_attack(G, "random_attack", fractions=fractions, n_runs=5, seed=42)
     
     print("Running degree_targeted_attack...")
     degree_result = simulate_attack(G, "degree_targeted_attack", fractions=fractions, n_runs=1)
+
+    print("Running pagerank_targeted_attack...")
+    pagerank_result = simulate_attack(G, "pagerank_targeted_attack", fractions=fractions, n_runs=1)
     
     print("Running betweenness_targeted_attack...")
     betweenness_result = None
@@ -408,6 +417,7 @@ async def get_attack_impact(
         "baseline": baseline,
         "random_attack": random_result,
         "degree_targeted_attack": degree_result,
+        "pagerank_targeted_attack": pagerank_result,
         "betweenness_targeted_attack": betweenness_result
     }
 
@@ -583,7 +593,13 @@ async def get_top_k_impact(
 
 @router.get("/attack/impact-custom")
 async def get_attack_impact_custom(
-    strategy: str = Query(..., description="Attack strategy: 'random_attack', 'degree_targeted_attack', 'betweenness_targeted_attack'"),
+    strategy: str = Query(
+        ...,
+        description=(
+            "Attack strategy: 'random_attack', 'degree_targeted_attack', "
+            "'pagerank_targeted_attack', 'betweenness_targeted_attack'"
+        ),
+    ),
     max_fraction: float = Query(0.5, description="Maximum fraction to remove (0.0 to 1.0)"),
     n_runs: int = Query(5, description="Number of runs for averaging (only for random_attack)"),
     minLat: Optional[float] = Query(None),
@@ -598,7 +614,12 @@ async def get_attack_impact_custom(
     if G is None:
         raise HTTPException(400, "Graph not loaded")
     
-    if strategy not in ["random_attack", "degree_targeted_attack", "betweenness_targeted_attack"]:
+    if strategy not in [
+        "random_attack",
+        "degree_targeted_attack",
+        "pagerank_targeted_attack",
+        "betweenness_targeted_attack",
+    ]:
         raise HTTPException(400, "Invalid strategy")
     
     # Filter by bbox (default to Southeast Asia)
@@ -698,6 +719,83 @@ async def get_defense_impact_custom(
         "max_distance_km": max_distance_km,
         "attack_strategy": attack_strategy,
         "attack_original": attack_original,
-        "attack_reinforced": attack_reinforced
+        "attack_reinforced": attack_reinforced,
+    }
+
+
+@router.get("/case/route-metrics")
+async def route_metrics(
+    src_iata: str = Query(..., description="Source airport IATA code, e.g. 'FRA'"),
+    dst_iata: str = Query(..., description="Destination airport IATA code, e.g. 'SGN'"),
+    with_defense: bool = Query(False, description="Also evaluate on reinforced graph"),
+):
+    """
+    Case-study metric: đường đi A -> B.
+
+    - Đo số bước (hops) và số đường đi ngắn nhất giữa 2 sân bay.
+    - Tuỳ chọn: so sánh trước/sau khi thêm defense (reinforce_graph).
+    """
+    import networkx as nx
+
+    if app_state.graph is None:
+        raise HTTPException(400, "Graph not loaded")
+    G_full = app_state.get_active_graph()
+    if G_full is None:
+        raise HTTPException(400, "Graph not loaded")
+
+    # Tìm node id theo IATA
+    def find_airport_id(iata: str) -> int:
+        iata_up = iata.strip().upper()
+        for node_id, data in G_full.nodes(data=True):
+            if str(data.get("iata", "")).upper() == iata_up:
+                return int(node_id)
+        raise HTTPException(404, f"Airport with IATA '{iata}' not found")
+
+    try:
+        src_id = find_airport_id(src_iata)
+        dst_id = find_airport_id(dst_iata)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Error looking up airports: {e}")
+
+    def compute_metrics(G):
+        try:
+            path = nx.shortest_path(G, source=src_id, target=dst_id)
+            hops = len(path) - 1
+            # Đếm số đường đi ngắn nhất (độ dài = hops)
+            num_shortest = 0
+            for _p in nx.all_shortest_paths(G, source=src_id, target=dst_id):
+                num_shortest += 1
+            path_iata = [G.nodes[n].get("iata", str(n)) for n in path]
+            return {
+                "connected": True,
+                "hops": hops,
+                "num_shortest_paths": num_shortest,
+                "path_iata": path_iata,
+            }
+        except nx.NetworkXNoPath:
+            return {
+                "connected": False,
+                "hops": None,
+                "num_shortest_paths": 0,
+                "path_iata": [],
+            }
+
+    baseline = compute_metrics(G_full)
+
+    defense_metrics = None
+    added_edges = 0
+    if with_defense:
+        G_def = reinforce_graph(G_full, k=10, max_distance_km=3000)
+        added_edges = G_def.number_of_edges() - G_full.number_of_edges()
+        defense_metrics = compute_metrics(G_def)
+
+    return {
+        "src_iata": src_iata.upper(),
+        "dst_iata": dst_iata.upper(),
+        "baseline": baseline,
+        "with_defense": defense_metrics,
+        "added_edges": added_edges,
     }
 

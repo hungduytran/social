@@ -763,6 +763,7 @@ function App() {
               >
                 <option value="random_attack">Random Attack</option>
                 <option value="degree_targeted_attack">Degree Targeted</option>
+                <option value="pagerank_targeted_attack">PageRank Targeted</option>
                 <option value="betweenness_targeted_attack">Betweenness Targeted</option>
               </select>
             </div>

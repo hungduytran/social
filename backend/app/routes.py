@@ -11,7 +11,7 @@ from app.attacks import (
     betweenness_targeted_attack,
     pagerank_targeted_attack,
 )
-from app.defense import reinforce_graph, add_edges_by_effective_resistance
+from app.defense import reinforce_graph, add_edges_by_effective_resistance, reinforce_graph_schneider
 from app.geojson import to_geojson
 from app.redundancy import suggest_redundancy
 from app.filter import filter_graph_by_bbox
@@ -834,6 +834,103 @@ async def get_defense_impact_custom(
         "attack_strategy": attack_strategy,
         "attack_original": attack_original,
         "attack_reinforced": attack_reinforced,
+    }
+
+
+@router.get("/defense/impact-schneider")
+async def get_defense_impact_schneider(
+    max_trials: int = Query(20000, description="Maximum number of swap trials"),
+    patience: int = Query(5000, description="Stop if no improvement after N trials"),
+    attack_strategy: str = Query("degree_targeted_attack", description="Attack strategy to test"),
+    minLat: Optional[float] = Query(None),
+    maxLat: Optional[float] = Query(None),
+    minLon: Optional[float] = Query(None),
+    maxLon: Optional[float] = Query(None)
+):
+    """
+    Get Schneider defense impact (edge swapping method).
+    
+    Schneider defense:
+    - Swaps edges to create "onion-like" structure (connect similar-degree nodes)
+    - Preserves number of nodes and edges (only swaps, no add/remove)
+    - Optimizes R-index (robustness index) by trying many swaps
+    """
+    if app_state.graph is None:
+        raise HTTPException(400, "Graph not loaded")
+    G = app_state.get_active_graph()
+    if G is None:
+        raise HTTPException(400, "Graph not loaded")
+    
+    # Filter by bbox (default to Southeast Asia)
+    bbox = None
+    if any([minLat, maxLat, minLon, maxLon]):
+        bbox = {
+            "minLat": minLat,
+            "maxLat": maxLat,
+            "minLon": minLon,
+            "maxLon": maxLon
+        }
+        G = filter_graph_by_bbox(G, bbox)
+    else:
+        bbox = {"minLat": -10, "maxLat": 30, "minLon": 90, "maxLon": 150}
+        G = filter_graph_by_bbox(G, bbox)
+    
+    if len(G) == 0:
+        raise HTTPException(400, "No nodes in region")
+    
+    print(f"Computing Schneider defense impact: max_trials={max_trials}, patience={patience}")
+    
+    # IMPORTANT: Filter to LCC only (matching notebook implementation)
+    from app.metrics import get_lcc
+    lcc_nodes = get_lcc(G)
+    G_lcc = G.subgraph(lcc_nodes).copy()
+    N0_original = len(G_lcc)
+    
+    print(f"Working on LCC: {N0_original} nodes (original graph had {len(G)} nodes)")
+    
+    # Apply Schneider defense (works on LCC and returns LCC)
+    G_optimized, schneider_info = reinforce_graph_schneider(
+        G_lcc,
+        max_trials=max_trials,
+        patience=patience,
+        seed=123
+    )
+    
+    # Verify both graphs have the same number of nodes (both should be LCC)
+    if len(G_optimized) != N0_original:
+        print(f"Warning: Optimized graph has {len(G_optimized)} nodes, LCC has {N0_original} nodes")
+    else:
+        print(f"Verified: Both graphs have {N0_original} nodes")
+    
+    # Note: Schneider swaps edges, so edge count may change slightly
+    swapped_edges_info = {
+        "original_edges": G_lcc.number_of_edges(),
+        "optimized_edges": G_optimized.number_of_edges(),
+        "accepted_swaps": schneider_info.get("accepted_swaps", 0),
+        "R_best": schneider_info.get("R_best_static", 0.0),
+    }
+    
+    # Use LCC for both original and optimized (both have same nodes)
+    baseline_original = get_stats(G_lcc)
+    baseline_optimized = get_stats(G_optimized)
+    
+    fractions = [round(i * 0.05, 2) for i in range(11)]
+    
+    # Test attack on both (both will normalize by N0_original, which is the same)
+    print(f"Testing {attack_strategy} on original LCC (N0={N0_original})...")
+    attack_original = simulate_attack(G_lcc, attack_strategy, fractions=fractions, n_runs=1)
+    
+    print(f"Testing {attack_strategy} on Schneider-optimized LCC (N0={len(G_optimized)})...")
+    attack_optimized = simulate_attack(G_optimized, attack_strategy, fractions=fractions, n_runs=1)
+    
+    return {
+        "baseline_original": baseline_original,
+        "baseline_optimized": baseline_optimized,
+        "swapped_edges_info": swapped_edges_info,
+        "schneider_info": schneider_info,
+        "attack_strategy": attack_strategy,
+        "attack_original": attack_original,
+        "attack_optimized": attack_optimized,
     }
 
 

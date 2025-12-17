@@ -113,6 +113,12 @@ function App() {
   const [maxDistance, setMaxDistance] = useState<number>(2000)
   const [defenseAttackStrategy, setDefenseAttackStrategy] = useState<string>('degree_targeted_attack')
   
+  // Schneider Defense parameters
+  const [schneiderMaxTrials, setSchneiderMaxTrials] = useState<number>(20000)
+  const [schneiderPatience, setSchneiderPatience] = useState<number>(5000)
+  const [schneiderAttackStrategy, setSchneiderAttackStrategy] = useState<string>('degree_targeted_attack')
+  const [schneiderDefenseResult, setSchneiderDefenseResult] = useState<any>(null)
+  
   // Top-k impact
   const [topKImpact, setTopKImpact] = useState<any>(null)
   const [topK, setTopK] = useState<number>(10)
@@ -427,6 +433,34 @@ function App() {
       setShowCurvesPanel(true)
     } catch (error: any) {
       console.error('Error running custom defense analysis:', error)
+      alert('Error: ' + (error.response?.data?.detail || error.message))
+    } finally {
+      setLoadingAnalysis(false)
+    }
+  }
+
+  async function runSchneiderDefenseAnalysis() {
+    setLoadingAnalysis(true)
+    try {
+      const region = REGIONS[selectedRegion]
+      const params: any = { 
+        max_trials: schneiderMaxTrials,
+        patience: schneiderPatience,
+        attack_strategy: schneiderAttackStrategy
+      }
+      if (region.bbox) {
+        params.minLat = region.bbox.minLat
+        params.maxLat = region.bbox.maxLat
+        params.minLon = region.bbox.minLon
+        params.maxLon = region.bbox.maxLon
+      }
+      const res = await API.get('/defense/impact-schneider', { params })
+      console.log('Schneider Defense Response:', res.data)
+      setSchneiderDefenseResult(res.data)
+      setShowCurvesPanel(true)
+      console.log('Schneider Defense Result set, showCurvesPanel:', true)
+    } catch (error: any) {
+      console.error('Error running Schneider defense analysis:', error)
       alert('Error: ' + (error.response?.data?.detail || error.message))
     } finally {
       setLoadingAnalysis(false)
@@ -1000,6 +1034,93 @@ function App() {
             </button>
           </div>
 
+          {/* Schneider Defense Strategy */}
+          <div style={{ marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #eee' }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#ff9900' }}>
+              🔄 Schneider Defense (Edge Swapping)
+            </h3>
+            <div style={{ 
+              fontSize: '10px', 
+              color: '#666', 
+              marginBottom: '10px', 
+              padding: '8px', 
+              background: '#fff8f0', 
+              borderRadius: '4px',
+              lineHeight: '1.4'
+            }}>
+              <strong>Phương pháp:</strong> Swap edges để tạo cấu trúc "onion-like" (kết nối nodes có degree tương tự). 
+              Giữ nguyên số lượng nodes và edges (chỉ swap, không thêm/xóa). Tối ưu R-index để tăng robustness.
+            </div>
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ fontSize: '11px', display: 'block', marginBottom: '3px', color: '#666' }}>
+                Max Trials: {schneiderMaxTrials.toLocaleString()}
+              </label>
+              <input
+                type="range"
+                min="5000"
+                max="50000"
+                step="5000"
+                value={schneiderMaxTrials}
+                onChange={(e) => setSchneiderMaxTrials(Number(e.target.value))}
+                style={{ width: '100%' }}
+              />
+              <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                Số lần thử swap tối đa (càng nhiều càng tốt nhưng chậm hơn)
+              </div>
+            </div>
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ fontSize: '11px', display: 'block', marginBottom: '3px', color: '#666' }}>
+                Patience: {schneiderPatience.toLocaleString()}
+              </label>
+              <input
+                type="range"
+                min="1000"
+                max="10000"
+                step="1000"
+                value={schneiderPatience}
+                onChange={(e) => setSchneiderPatience(Number(e.target.value))}
+                style={{ width: '100%' }}
+              />
+              <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                Dừng nếu không cải thiện sau N lần thử liên tiếp
+              </div>
+            </div>
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ fontSize: '11px', display: 'block', marginBottom: '3px', color: '#666' }}>Test Attack:</label>
+              <select
+                value={schneiderAttackStrategy}
+                onChange={(e) => setSchneiderAttackStrategy(e.target.value)}
+                style={{ width: '100%', padding: '6px', fontSize: '12px', border: '1px solid #ccc', borderRadius: '4px' }}
+              >
+                <option value="degree_targeted_attack">Degree Targeted</option>
+                <option value="random_attack">Random Attack</option>
+                <option value="pagerank_targeted_attack">PageRank Targeted</option>
+                <option value="betweenness_targeted_attack">Betweenness Targeted</option>
+              </select>
+              <div style={{ fontSize: '10px', color: '#999', marginTop: '2px' }}>
+                Chiến lược tấn công để đánh giá hiệu quả defense
+              </div>
+            </div>
+            <button
+              onClick={() => runSchneiderDefenseAnalysis()}
+              disabled={loadingAnalysis}
+              style={{
+                width: '100%',
+                padding: '8px',
+                background: '#ff9900',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: loadingAnalysis ? 'not-allowed' : 'pointer',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}
+            >
+              {loadingAnalysis ? 'Running...' : 'Run Schneider Defense'}
+            </button>
+          </div>
+
           {/* Route Case Study */}
           <div style={{ marginBottom: '10px' }}>
             <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#9933cc' }}>Route Case Study</h3>
@@ -1162,7 +1283,7 @@ function App() {
         }}>
 
           {/* Robustness Curves */}
-          {showCurvesPanel && robustnessCurves && (
+          {showCurvesPanel && (robustnessCurves || schneiderDefenseResult) && (
             <div>
               <div style={{ 
                 display: 'flex', 
@@ -1174,7 +1295,10 @@ function App() {
               }}>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#0066cc' }}>📊 Robustness Analysis</h3>
                 <button
-                  onClick={() => setShowCurvesPanel(false)}
+                  onClick={() => {
+                    setShowCurvesPanel(false)
+                    setSchneiderDefenseResult(null) // Clear Schneider result when closing
+                  }}
                   style={{
                     background: '#f0f0f0',
                     border: '1px solid #ccc',
@@ -1189,7 +1313,7 @@ function App() {
                 </button>
               </div>
               
-              {robustnessCurves.baseline && (
+              {robustnessCurves && robustnessCurves.baseline && (
                 <div style={{ 
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
@@ -1575,6 +1699,160 @@ function App() {
                   </div>
                   <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
                     Click để phóng to
+                  </div>
+                </div>
+              )}
+
+              {/* Schneider Defense comparison */}
+              {schneiderDefenseResult && schneiderDefenseResult.attack_original && (
+                <div style={{ 
+                  marginTop: '30px',
+                  marginBottom: '30px',
+                  padding: '15px',
+                  background: 'white',
+                  borderRadius: '8px',
+                  border: '2px solid #ff9900',
+                  boxShadow: '0 2px 6px rgba(255,153,0,0.15)'
+                }}>
+                  <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: 'bold', color: '#ff9900' }}>
+                    🔄 Schneider Defense (Edge Swapping): {schneiderDefenseResult.attack_strategy?.replace('_', ' ').replace('attack', '').trim()}
+                  </h4>
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#666', 
+                    marginBottom: '15px',
+                    padding: '10px',
+                    background: '#fff8f0',
+                    borderRadius: '5px',
+                    lineHeight: '1.6'
+                  }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Phương pháp:</strong> Schneider Defense (Edge Swapping) - Swap edges để tạo cấu trúc "onion-like"
+                    </div>
+                    <div style={{ marginBottom: '4px', fontSize: '11px', color: '#555', paddingLeft: '8px' }}>
+                      • <strong>Onion-like structure:</strong> Kết nối nodes có degree tương tự (hubs với hubs, nodes với nodes)
+                    </div>
+                    <div style={{ marginBottom: '4px', fontSize: '11px', color: '#555', paddingLeft: '8px' }}>
+                      • <strong>Giữ nguyên số edges:</strong> Chỉ swap, không thêm/xóa edges (khác với TER Defense)
+                    </div>
+                    <div style={{ marginBottom: '4px', fontSize: '11px', color: '#555', paddingLeft: '8px' }}>
+                      • <strong>Tối ưu R-index:</strong> Chọn swap làm tăng robustness index (R-index) nhất
+                    </div>
+                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #ffe0b3' }}>
+                      <div><strong>Original Graph:</strong> {schneiderDefenseResult.baseline_original?.edges} edges, {schneiderDefenseResult.baseline_original?.nodes} nodes</div>
+                      <div><strong>Optimized Graph:</strong> {schneiderDefenseResult.baseline_optimized?.edges} edges, {schneiderDefenseResult.baseline_optimized?.nodes} nodes</div>
+                      <div style={{ marginTop: '6px', fontSize: '11px', color: '#555' }}>
+                        <strong>Swaps:</strong> {schneiderDefenseResult.swapped_edges_info?.accepted_swaps || 0} accepted swaps (từ {schneiderDefenseResult.schneider_info?.trials_done || 0} trials)
+                      </div>
+                      <div style={{ marginTop: '4px', fontSize: '11px', color: '#555' }}>
+                        <strong>R-index:</strong> {schneiderDefenseResult.schneider_info?.R_best_static?.toFixed(4) || 'N/A'} 
+                        (càng cao = càng robust)
+                      </div>
+                      <div style={{ marginTop: '4px', fontSize: '11px', color: '#555' }}>
+                        <strong>Configuration:</strong> Max trials: {schneiderDefenseResult.schneider_info?.trials_done?.toLocaleString() || 'N/A'}, 
+                        Patience: {schneiderDefenseResult.schneider_info?.patience?.toLocaleString() || 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* LCC Size Chart */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold', color: '#666' }}>
+                      Relative LCC Size
+                    </h5>
+                    <div 
+                      onClick={() => {
+                        if (schneiderDefenseResult.attack_original && schneiderDefenseResult.attack_original.fraction_removed) {
+                          setZoomedChart({
+                            title: `Schneider Defense: ${schneiderDefenseResult.attack_strategy?.replace('_', ' ').replace('attack', '').trim()}`,
+                            data: schneiderDefenseResult.attack_original.fraction_removed.map((f: number, i: number) => ({
+                              fraction: f,
+                              'Original': schneiderDefenseResult.attack_original.relative_lcc_size[i],
+                              'Optimized': schneiderDefenseResult.attack_optimized?.relative_lcc_size[i] || null
+                            })),
+                            config: {
+                              xKey: 'fraction',
+                              xLabel: 'Fraction Removed',
+                              yLabel: 'Relative LCC Size',
+                              lines: [
+                                { key: 'Original', stroke: '#ff0000' },
+                                { key: 'Optimized', stroke: '#ff9900' }
+                              ]
+                            }
+                          });
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <ResponsiveContainer width="100%" height={280}>
+                        <LineChart data={schneiderDefenseResult.attack_original.fraction_removed.map((f: number, i: number) => ({
+                          fraction: f,
+                          'Original': schneiderDefenseResult.attack_original.relative_lcc_size[i],
+                          'Optimized': schneiderDefenseResult.attack_optimized?.relative_lcc_size[i] || null
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
+                          <YAxis label={{ value: 'Relative LCC Size', angle: -90, position: 'insideLeft' }} />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="Original" stroke="#ff0000" strokeWidth={2} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="Optimized" stroke="#ff9900" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                      Click để phóng to
+                    </div>
+                  </div>
+
+                  {/* Diameter Chart */}
+                  <div>
+                    <h5 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold', color: '#666' }}>
+                      Diameter
+                    </h5>
+                    <div 
+                      onClick={() => {
+                        if (schneiderDefenseResult.attack_original && schneiderDefenseResult.attack_original.fraction_removed) {
+                          setZoomedChart({
+                            title: `Schneider Defense - Diameter: ${schneiderDefenseResult.attack_strategy?.replace('_', ' ').replace('attack', '').trim()}`,
+                            data: schneiderDefenseResult.attack_original.fraction_removed.map((f: number, i: number) => ({
+                              fraction: f,
+                              'Original': schneiderDefenseResult.attack_original.diameter[i],
+                              'Optimized': schneiderDefenseResult.attack_optimized?.diameter[i] || null
+                            })),
+                            config: {
+                              xKey: 'fraction',
+                              xLabel: 'Fraction Removed',
+                              yLabel: 'Diameter',
+                              lines: [
+                                { key: 'Original', stroke: '#ff0000' },
+                                { key: 'Optimized', stroke: '#ff9900' }
+                              ]
+                            }
+                          });
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <ResponsiveContainer width="100%" height={280}>
+                        <LineChart data={schneiderDefenseResult.attack_original.fraction_removed.map((f: number, i: number) => ({
+                          fraction: f,
+                          'Original': schneiderDefenseResult.attack_original.diameter[i],
+                          'Optimized': schneiderDefenseResult.attack_optimized?.diameter[i] || null
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="fraction" label={{ value: 'Fraction Removed', position: 'insideBottom', offset: -5 }} />
+                          <YAxis label={{ value: 'Diameter', angle: -90, position: 'insideLeft' }} />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="Original" stroke="#ff0000" strokeWidth={2} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="Optimized" stroke="#ff9900" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                      Click để phóng to
+                    </div>
                   </div>
                 </div>
               )}

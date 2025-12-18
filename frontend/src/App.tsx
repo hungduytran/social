@@ -2153,16 +2153,18 @@ function App() {
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart 
                       data={attackSimResult.chart_data.map((d: any) => {
-                        const allValues = attackSimResult.chart_data
+                        const vals = attackSimResult.chart_data
                           .filter((dd: any) => (dd.original_connected && dd.original_km) || (dd.defended_connected && dd.defended_km))
                           .map((dd: any) => Math.max(dd.original_km || 0, dd.defended_km || 0));
-                        const maxVal = allValues.length > 0 ? Math.max(...allValues) : 10000;
+                        const baseMax = vals.length > 0 ? Math.max(...vals) : 10000;
+                        const placeholder = baseMax * 1.12;
                         return {
                           scenario: d.scenario,
-                          'Original': d.original_connected ? (d.original_km || 0) : null,
-                          'Defended': d.defended_connected ? (d.defended_km || 0) : null,
-                          'Original_X': !d.original_connected ? maxVal * 1.12 : null,
-                          'Defended_X': d.defended_connected === false ? maxVal * 1.12 : null
+                          Original: d.original_connected ? (d.original_km || 0) : placeholder,
+                          Defended: d.defended_connected ? (d.defended_km || 0) : (d.defended_connected === false ? placeholder : null),
+                          OriginalDisconnected: !d.original_connected,
+                          DefendedDisconnected: d.defended_connected === false,
+                          __placeholder: placeholder
                         };
                       })}
                       margin={{ top: 40, right: 20, left: 10, bottom: 60 }}
@@ -2181,56 +2183,30 @@ function App() {
                         tick={{ fontSize: 10 }}
                       />
                       <Tooltip 
-                        formatter={(value: any, name: string) => {
-                          if (name.includes('_X')) return null;
-                          if (value === null || value === undefined) return ['DISCONNECTED', name];
-                          return [`${value?.toFixed(0)} km`, name];
+                        formatter={(value: any, name: string, props: any) => {
+                          const p = props?.payload || {};
+                          const isDisc = name === 'Original' ? p.OriginalDisconnected : (name === 'Defended' ? p.DefendedDisconnected : false);
+                          return isDisc ? ['DISCONNECTED', name] : [`${(value ?? 0).toFixed(0)} km`, name];
                         }}
                       />
                       <Legend wrapperStyle={{ fontSize: '11px' }} />
-                      <Bar dataKey="Original" fill="#ff9999" name="Original" />
-                      <Bar dataKey="Defended" fill="#66b3ff" name="Defended" />
-                      <Bar 
-                        dataKey="Original_X" 
-                        fill="transparent" 
-                        name="" 
-                        isAnimationActive={false}
+                      <Bar dataKey="Original" fill="#ff9999" name="Original"
                         label={(props: any) => {
-                          if (props.value) {
+                          const p = props?.payload || {};
+                          if (p.OriginalDisconnected) {
                             return (
-                              <text 
-                                x={props.x + props.width / 2} 
-                                y={props.y - 5} 
-                                fill="red" 
-                                fontSize={16} 
-                                fontWeight="bold" 
-                                textAnchor="middle"
-                              >
-                                ✗
-                              </text>
+                              <text x={props.x + props.width / 2} y={props.y - 6} fill="red" fontSize={16} fontWeight="bold" textAnchor="middle">✗</text>
                             );
                           }
                           return null;
                         }}
                       />
-                      <Bar 
-                        dataKey="Defended_X" 
-                        fill="transparent" 
-                        name="" 
-                        isAnimationActive={false}
+                      <Bar dataKey="Defended" fill="#66b3ff" name="Defended"
                         label={(props: any) => {
-                          if (props.value) {
+                          const p = props?.payload || {};
+                          if (p.DefendedDisconnected) {
                             return (
-                              <text 
-                                x={props.x + props.width / 2} 
-                                y={props.y - 5} 
-                                fill="red" 
-                                fontSize={16} 
-                                fontWeight="bold" 
-                                textAnchor="middle"
-                              >
-                                ✗
-                              </text>
+                              <text x={props.x + props.width / 2} y={props.y - 6} fill="red" fontSize={16} fontWeight="bold" textAnchor="middle">✗</text>
                             );
                           }
                           return null;

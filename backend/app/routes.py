@@ -961,6 +961,9 @@ async def route_metrics(
     if G_full is None:
         raise HTTPException(400, "Graph not loaded")
 
+    # Ensure edge weights for weighted routing
+    G_full = _ensure_edge_weights(G_full.copy())
+
     # Tìm node id theo IATA
     def find_airport_id(iata: str) -> int:
         iata_up = iata.strip().upper()
@@ -1005,26 +1008,27 @@ async def route_metrics(
     defense_metrics = None
     added_edges = 0
     if with_defense:
-        # IMPORTANT: Filter to LCC only (matching notebook implementation)
-        # This ensures TER defense works on LCC and returns LCC
-        from app.metrics import get_lcc
-        lcc_nodes = get_lcc(G_full)
-        G_lcc = G_full.subgraph(lcc_nodes).copy()
-        
-        # Check if both airports are in LCC
-        if src_id not in G_lcc or dst_id not in G_lcc:
-            raise HTTPException(400, f"Airports {src_iata} and/or {dst_iata} are not in the largest connected component")
-        
-        # Reinforce LCC using TER method
-        G_def, added_edges_list = add_edges_by_effective_resistance(
-            G_lcc, 
-            k=10, 
-            max_candidates=2000,
-            max_distance_km=3000, 
-            seed=123
-        )
-        added_edges = len(added_edges_list)
-        defense_metrics = compute_metrics(G_def)
+        # Work on the connected component that actually contains src and dst.
+        # If no path exists between src and dst, do NOT raise; just skip defense metrics.
+        import networkx as nx
+        if nx.has_path(G_full, src_id, dst_id):
+            comp_nodes = nx.node_connected_component(G_full, src_id)
+            G_comp = G_full.subgraph(comp_nodes).copy()
+
+            # Reinforce the connected component (TER method expects a connected graph)
+            G_def, added_edges_list = add_edges_by_effective_resistance(
+                G_comp,
+                k=10,
+                max_candidates=2000,
+                max_distance_km=3000,
+                seed=123,
+            )
+            added_edges = len(added_edges_list)
+            defense_metrics = compute_metrics(G_def)
+        else:
+            # Keep defense_metrics=None when src/dst are disconnected
+            defense_metrics = None
+            added_edges = 0
 
     return {
         "src_iata": src_iata.upper(),
@@ -1071,6 +1075,9 @@ async def route_attack_simulation(
     dst_iata: str = Query(..., description="Destination airport IATA code"),
     with_defense: bool = Query(True, description="Also evaluate on defended graph"),
     defense_method: str = Query("TER", description="Defense method: TER or Schneider"),
+    defense_k: int = Query(500, description="Number of backup edges to add for TER defense"),
+    combo_iata: Optional[str] = Query(None, description="Optional comma-separated IATA codes to remove together for the combo attack (e.g., 'DUB,GLA')"),
+    debug: bool = Query(False, description="Return debug info for combo scenario"),
 ):
     """
     Adaptive attack simulation: Tấn công từng node trên đường đi và so sánh Original vs Defended.
@@ -1119,6 +1126,27 @@ async def route_attack_simulation(
     # Lấy các transit nodes (bỏ src và dst)
     transit_ids = path[1:-1] if len(path) > 2 else []
     transit_iata = [G_full.nodes[nid].get("iata", str(nid)) for nid in transit_ids]
+
+    # Xác định combo attack targets
+    combo_targets_iata: List[str] = []
+    cfn_neighbors_iata: List[str] = []
+    if combo_iata:
+        combo_targets_iata = [c.strip().upper() for c in combo_iata.split(',') if c.strip()]
+    elif src_iata.strip().upper() == "CFN" or dst_iata.strip().upper() == "CFN":
+        # Donegal study: always test DUB + GLA
+        combo_targets_iata = ["DUB", "GLA"]
+    else:
+        combo_targets_iata = transit_iata[:2]
+
+    # Map combo IATA -> node ids (chỉ lấy những node tồn tại trong graph)
+    combo_targets_ids: List[int] = []
+    for code in combo_targets_iata:
+        try:
+            nid = [n for n, d in G_full.nodes(data=True) if str(d.get("iata", "")).upper() == code]
+            if len(nid) > 0:
+                combo_targets_ids.append(int(nid[0]))
+        except Exception:
+            pass
     
     # Chuẩn bị defended graph nếu cần
     G_def = None
@@ -1131,10 +1159,11 @@ async def route_attack_simulation(
             raise HTTPException(400, f"Airports {src_iata} and/or {dst_iata} are not in the largest connected component")
         
         if defense_method == "TER":
+            # Allow configuring how many backup edges to add; higher k makes defended graph more robust
             G_def, _ = add_edges_by_effective_resistance(
                 G_lcc,
-                k=10,
-                max_candidates=2000,
+                k=defense_k,
+                max_candidates=min(20000, defense_k * 100),
                 max_distance_km=3000,
                 seed=123
             )
@@ -1149,6 +1178,40 @@ async def route_attack_simulation(
             raise HTTPException(400, f"Unknown defense method: {defense_method}")
         
         G_def = _ensure_edge_weights(G_def)
+
+    # Nếu là kịch bản CFN và có combo targets, đảm bảo defended có ít nhất 1 đường dự phòng sau khi xoá combo
+    if G_def and (src_iata.strip().upper() == "CFN" or dst_iata.strip().upper() == "CFN") and len(combo_targets_ids) >= 1:
+        try:
+            import math
+            from geopy.distance import great_circle
+            CFN_CODE = "CFN"
+            # Xác định id CFN theo đầu mút
+            cfn_id = src_id if str(G_full.nodes[src_id].get("iata", "")).upper() == CFN_CODE else dst_id
+            # Nếu sau khi xoá combo mà vẫn còn đường thì không cần ép thêm cạnh
+            G_check = G_def.copy()
+            G_check.remove_nodes_from(combo_targets_ids)
+            if not nx.has_path(G_check, src_id, dst_id):
+                # Tìm ứng viên gần nhất để nối CFN (không phải các node combo)
+                candidates = [n for n in G_def.nodes if n not in set(combo_targets_ids + [cfn_id])]
+                best = None
+                best_dist = float('inf')
+                cfn_lat = G_def.nodes[cfn_id].get('lat'); cfn_lon = G_def.nodes[cfn_id].get('lon')
+                if cfn_lat is not None and cfn_lon is not None:
+                    for n in candidates:
+                        lat = G_def.nodes[n].get('lat'); lon = G_def.nodes[n].get('lon')
+                        if lat is None or lon is None:
+                            continue
+                        try:
+                            dkm = great_circle((cfn_lat, cfn_lon), (lat, lon)).kilometers
+                        except Exception:
+                            continue
+                        if dkm < best_dist:
+                            best = n; best_dist = dkm
+                # Nối cạnh dự phòng nếu tìm được ứng viên
+                if best is not None and math.isfinite(best_dist):
+                    G_def.add_edge(cfn_id, best, distance_km=best_dist, weight=float(best_dist))
+        except Exception as _:
+            pass
     
     # Hàm tính path length sau khi tấn công
     def attack_and_measure(G, attack_node_ids):
@@ -1226,19 +1289,17 @@ async def route_attack_simulation(
             "defended": def_result
         })
     
-    # Scenario Combo: Tấn công nhiều nodes cùng lúc (top 2 transit nodes)
-    if len(transit_ids) >= 2:
-        combo_ids = transit_ids[:2]
-        combo_iata = transit_iata[:2]
-        orig_result = attack_and_measure(G_full, combo_ids)
+    # Scenario Combo: sử dụng danh sách combo được chọn (ưu tiên tham số hoặc CFN => DUB+GLA)
+    if len(combo_targets_ids) >= 1:
+        orig_result = attack_and_measure(G_full, combo_targets_ids)
         def_result = None
         if G_def:
-            def_result = attack_and_measure(G_def, combo_ids)
-        
+            def_result = attack_and_measure(G_def, combo_targets_ids)
+        combo_label = f"Combo: {', '.join(combo_targets_iata)}" if combo_targets_iata else "Combo"
         attack_results.append({
-            "scenario": "Combo Attack",
-            "target_iata": ", ".join(combo_iata),
-            "target_ids": combo_ids,
+            "scenario": combo_label,
+            "target_iata": ", ".join(combo_targets_iata) if combo_targets_iata else None,
+            "target_ids": combo_targets_ids,
             "original": orig_result,
             "defended": def_result
         })

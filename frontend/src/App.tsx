@@ -99,6 +99,9 @@ function App() {
   const [caseDefenseMethod, setCaseDefenseMethod] = useState<string>('TER')
   const [attackSimResult, setAttackSimResult] = useState<any | null>(null)
   const [showAttackSimModal, setShowAttackSimModal] = useState<boolean>(false)
+  // Resizable right panel
+  const [rightWidth, setRightWidth] = useState<number>(420)
+  const [isResizing, setIsResizing] = useState<boolean>(false)
 
   // Overview / report panel
   const [showOverview, setShowOverview] = useState<boolean>(false)
@@ -544,6 +547,12 @@ function App() {
     }
   }
 
+  // TER readiness (enable redundancy button after TER run)
+  const [terReady, setTerReady] = useState<boolean>(false)
+  useEffect(() => {
+    if (robustnessCurves) setTerReady(true)
+  }, [robustnessCurves])
+
   // User-controlled: Tính số lượng routes/airports theo tỷ lệ user chọn
   const visibleRoutes = useMemo(() => {
     if (!showRoutes || routes.length === 0) return []
@@ -579,6 +588,22 @@ function App() {
   }
 
   const region = REGIONS[selectedRegion]
+
+  // Resize handlers for right panel
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!isResizing) return
+      const newWidth = Math.min(900, Math.max(320, window.innerWidth - e.clientX))
+      setRightWidth(newWidth)
+    }
+    const onUp = () => setIsResizing(false)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [isResizing])
 
   return (
     <div style={{ 
@@ -830,15 +855,24 @@ function App() {
         )}
       </div>
 
-      {/* Right Panel: Controls & Analysis */}
+      {/* Right Panel: Controls & Analysis (resizable) */}
       <div style={{
-        flex: '0 0 400px',
+        flex: '0 0 auto',
+        width: rightWidth,
         display: 'flex',
         flexDirection: 'column',
         background: '#f8f9fa',
         borderLeft: '1px solid #ddd',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        position: 'relative',
+        userSelect: isResizing ? 'none' : 'auto'
       }}>
+        {/* Drag handle */}
+        <div
+          onMouseDown={() => setIsResizing(true)}
+          style={{ position: 'absolute', left: -4, top: 0, width: 8, height: '100%', cursor: 'col-resize', zIndex: 3000 }}
+          title="Drag to resize"
+        />
         {/* Controls Section */}
         <div style={{
           flex: '0 0 auto',
@@ -869,41 +903,9 @@ function App() {
           <div style={{ marginBottom: '15px' }}>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#0066cc' }}>Quick Analysis</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-              <button
-                onClick={() => runTopKImpactAnalysis()}
-                disabled={loadingAnalysis}
-                style={{
-                  padding: '10px',
-                  background: '#cc0066',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: loadingAnalysis ? 'not-allowed' : 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 'bold',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                }}
-              >
-                {loadingAnalysis ? '...' : `Top-${topK} Impact`}
-              </button>
+
             </div>
-            <button
-              onClick={() => loadRedundancySuggestions(10)}
-              style={{
-                width: '100%',
-                padding: '10px',
-                background: '#00cc66',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-            >
-              Where to Add Redundancy?
-            </button>
+
           </div>
 
           {/* Custom Attack Strategy */}
@@ -1042,19 +1044,48 @@ function App() {
               disabled={loadingAnalysis}
               style={{
                 width: '100%',
-                padding: '8px',
+                padding: '10px',
                 background: '#00cc66',
                 color: 'white',
                 border: 'none',
-                borderRadius: '4px',
+                borderRadius: '6px',
                 cursor: loadingAnalysis ? 'not-allowed' : 'pointer',
-                fontSize: '12px',
+                fontSize: '13px',
                 fontWeight: 'bold',
                 boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
               }}
             >
               {loadingAnalysis ? 'Running...' : 'Run TER Defense'}
             </button>
+
+            {/* Where to Add Redundancy (TER) - under TER Defense section */}
+            <div style={{ marginTop: '10px' }}>
+              <button
+                onClick={() => terReady && loadRedundancySuggestions(10)}
+                disabled={!terReady || loadingAnalysis}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: terReady ? '#008f4c' : '#9fd9bf',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: (!terReady || loadingAnalysis) ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  letterSpacing: 0.2,
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+                }}
+                title={terReady ? 'Suggest redundancy edges (TER-based)' : 'Run TER Defense first to enable'}
+              >
+                Where to Add Redundancy (TER)
+              </button>
+              {!terReady && (
+                <div style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>
+                  Run TER Defense first (click "Run TER Defense") to enable redundancy suggestions.
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Schneider Defense Strategy */}
@@ -1297,8 +1328,8 @@ function App() {
             )}
           </div>
 
-          {/* Top-K Impact Settings */}
-          <div>
+          {/* Top-K Impact Settings (hidden) */}
+          <div style={{ display: 'none' }}>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#cc0066' }}>Top-K Impact</h3>
             <div style={{ marginBottom: '8px' }}>
               <label style={{ fontSize: '11px', display: 'block', marginBottom: '3px', color: '#666' }}>

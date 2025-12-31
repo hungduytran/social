@@ -5,19 +5,44 @@ from typing import Optional, Set, Tuple
 
 class AppState:
     def __init__(self):
-        self.graph: Optional[nx.Graph] = None  # Original graph
-        self.removed_nodes: Set[int] = set()  # Removed node IDs
-        self.removed_edges: Set[Tuple[int, int]] = set()  # Removed edge tuples
-    
-    def get_active_graph(self) -> Optional[nx.Graph]:
-        """Get graph with removed nodes/edges excluded"""
-        if self.graph is None:
+        # Base graphs (loaded at startup)
+        self.graph_undirected: Optional[nx.Graph] = None
+        self.graph_directed: Optional[nx.DiGraph] = None
+
+        # Removals are tracked separately per mode to avoid mixing edge semantics
+        self.removed_nodes_undirected: Set[int] = set()
+        self.removed_edges_undirected: Set[Tuple[int, int]] = set()
+
+        self.removed_nodes_directed: Set[int] = set()
+        self.removed_edges_directed: Set[Tuple[int, int]] = set()
+
+        # Backward-compat aliases (keep old code working): default is undirected
+        self.graph: Optional[nx.Graph] = None
+        self.removed_nodes: Set[int] = self.removed_nodes_undirected
+        self.removed_edges: Set[Tuple[int, int]] = self.removed_edges_undirected
+
+    def get_base_graph(self, mode: str = "undirected") -> Optional[nx.Graph]:
+        if mode == "directed":
+            return self.graph_directed
+        return self.graph_undirected
+
+    def get_active_graph(self, mode: str = "undirected") -> Optional[nx.Graph]:
+        """Get graph with removed nodes/edges excluded for a given mode."""
+        base = self.get_base_graph(mode)
+        if base is None:
             return None
-        G = self.graph.copy()
-        # Remove nodes
-        G.remove_nodes_from(self.removed_nodes)
-        # Remove edges
-        G.remove_edges_from(self.removed_edges)
+
+        G = base.copy()
+
+        if mode == "directed":
+            G.remove_nodes_from(self.removed_nodes_directed)
+            # directed edges are stored as (src, dst) exactly
+            G.remove_edges_from(self.removed_edges_directed)
+            return G
+
+        # undirected mode (default)
+        G.remove_nodes_from(self.removed_nodes_undirected)
+        G.remove_edges_from(self.removed_edges_undirected)
         return G
     
     def remove_node(self, node_id: int) -> bool:
@@ -74,6 +99,8 @@ class AppState:
 
 app_state = AppState()
 
+DEFAULT_GRAPH_MODE = "undirected"  # global default
+
 
 def load_data_on_startup():
     """Load data files from the OpenFlights folder next to the project root."""
@@ -102,14 +129,16 @@ def load_data_on_startup():
 
         if airports_path.exists() and routes_path.exists():
             try:
-                app_state.graph = load_and_build_graph(
+                app_state.graph_undirected = load_and_build_graph(
                     str(airports_path),
                     str(routes_path),
                 )
+                # keep backward-compat alias
+                app_state.graph = app_state.graph_undirected
                 print(
                     f"Loaded graph from {data_dir}: "
-                    f"{len(app_state.graph)} nodes, "
-                    f"{app_state.graph.number_of_edges()} edges"
+                    f"{len(app_state.graph_undirected)} nodes, "
+                    f"{app_state.graph_undirected.number_of_edges()} edges"
                 )
                 return
             except Exception as e:

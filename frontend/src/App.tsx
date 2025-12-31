@@ -64,6 +64,10 @@ const REGIONS = {
 }
 
 function App() {
+  // Toggle handler
+  function toggleGraphMode() {
+    setGraphMode(prev => (prev === 'undirected' ? 'directed' : 'undirected'))
+  }
   console.log('=== App component rendering ===')
   
   const [airports, setAirports] = useState<any[]>([])
@@ -71,6 +75,8 @@ function App() {
   const [showAirports, setShowAirports] = useState(true)
   const [showRoutes, setShowRoutes] = useState(true)
   const [loading, setLoading] = useState(true)
+  // Graph mode: "undirected" (mặc định) hoặc "directed"
+  const [graphMode, setGraphMode] = useState<'undirected' | 'directed'>('undirected')
   const [zoom, setZoom] = useState(2)
   const [airportRatio, setAirportRatio] = useState(100) // 0-100%
   const [routeRatio, setRouteRatio] = useState(100) // 0-100%
@@ -135,7 +141,7 @@ function App() {
     loadData()
     loadRemovedItems()
     loadAirportOptions()
-  }, [selectedRegion])
+  }, [selectedRegion, graphMode])
 
   useEffect(() => {
     // Refresh removed items periodically
@@ -154,12 +160,13 @@ function App() {
       console.log('Loading data for region:', selectedRegion)
       
       const region = REGIONS[selectedRegion]
-      const params = region.bbox ? {
-        minLat: region.bbox.minLat,
-        maxLat: region.bbox.maxLat,
-        minLon: region.bbox.minLon,
-        maxLon: region.bbox.maxLon
-      } : {}
+      const params: any = { mode: graphMode };
+      if (region.bbox) {
+        params.minLat = region.bbox.minLat;
+        params.maxLat = region.bbox.maxLat;
+        params.minLon = region.bbox.minLon;
+        params.maxLon = region.bbox.maxLon;
+      }
       
       // Add timestamp to force fresh data
       const timestamp = Date.now()
@@ -623,7 +630,7 @@ function App() {
         borderRight: '2px solid #ddd'
       }}>
         <MapContainer
-          key={`${selectedRegion}-${mapKey}-${airports.length}-${routes.length}`}
+          key={`${selectedRegion}-${graphMode}-${mapKey}-${airports.length}-${routes.length}`}
           center={region.center}
           zoom={region.zoom}
           style={{ width: '100%', height: '100%' }}
@@ -753,6 +760,26 @@ function App() {
                   </option>
                 ))}
               </select>
+
+              {/* Chế độ đồ thị */}
+              <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 'bold', color: '#0066cc' }}>
+                Chế độ đồ thị
+              </div>
+              <button
+                onClick={toggleGraphMode}
+                style={{
+                  width: '100%',
+                  padding: '6px',
+                  marginTop: '4px',
+                  fontSize: '12px',
+                  borderRadius: '4px',
+                  border: '1px solid #ccc',
+                  background: graphMode === 'directed' ? '#ffd966' : '#d9ead3',
+                  cursor: 'pointer'
+                }}
+              >
+                {graphMode === 'undirected' ? 'Chuyển sang Directed' : 'Chuyển sang Undirected'}
+              </button>
               <div style={{ fontSize: '10px', color: '#666', marginTop: '4px' }}>
                 Chọn Global để xem toàn bộ mạng bay, hoặc zoom vào từng khu vực.
               </div>

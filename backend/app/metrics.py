@@ -1,55 +1,97 @@
-"""Network metrics"""
+"""Network metrics – unified for undirected (Graph) & directed (DiGraph).
+
+This module exposes utility functions that automatically choose the
+appropriate definition of the *largest component* depending on whether
+the graph is directed (LSCC – largest strongly-connected component) or
+undirected (LCC – largest connected component).
+
+Only a lightweight subset of metrics is provided to keep the web API
+responsive.  (ASPL is hard-disabled for performance.)
+"""
+from __future__ import annotations
+
+from typing import Set
 import networkx as nx
 
+__all__ = [
+    "get_lcc",
+    "lcc_size",
+    "diameter",
+    "aspl",
+    "components_count",
+    "get_stats",
+]
 
-def get_lcc(G: nx.Graph):
-    """Largest connected component"""
+###############################################################################
+# Internal helpers
+###############################################################################
+
+def _largest_component_nodes(G: nx.Graph) -> Set[int]:
+    """Return node set of largest (strongly) connected component."""
     if len(G) == 0:
         return set()
-    return max(nx.connected_components(G), key=len, default=set())
+
+    if G.is_directed():
+        # For DiGraph use *strongly* connected components so that every pair
+        # is mutually reachable following edge direction.
+        return max(nx.strongly_connected_components(G), key=len)  # type: ignore[arg-type]
+    # Undirected – standard connected components
+    return max(nx.connected_components(G), key=len)  # type: ignore[arg-type]
+
+###############################################################################
+# Public API
+###############################################################################
+
+
+def get_lcc(G: nx.Graph) -> Set[int]:
+    """Nodes belonging to LCC (undirected) or LSCC (directed)."""
+    return _largest_component_nodes(G)
 
 
 def lcc_size(G: nx.Graph) -> float:
-    """Normalized LCC size"""
+    """Fraction |LCC| / |V| (automatic LSCC for DiGraph)."""
     if len(G) == 0:
         return 0.0
-    return len(get_lcc(G)) / len(G)
+    return len(_largest_component_nodes(G)) / len(G)
 
 
 def diameter(G: nx.Graph) -> float:
-    """Diameter of LCC (on LCC only)"""
-    lcc_nodes = get_lcc(G)
-    if len(lcc_nodes) < 2:
+    """Diameter measured on the largest component (0 if not applicable)."""
+    nodes = _largest_component_nodes(G)
+    if len(nodes) < 2:
         return 0.0
-    lcc = G.subgraph(lcc_nodes)
+
+    sub = G.subgraph(nodes)
     try:
-        return nx.diameter(lcc)
+        # For directed graphs *sub* is strongly connected so nx.diameter works.
+        return float(nx.diameter(sub))  # type: ignore[arg-type]
     except Exception:
         return 0.0
 
 
-def aspl(G: nx.Graph) -> float:
-    """
-    Average shortest path length (DISABLED in online app).
-
-    Tính ASPL chính xác trên đồ thị lớn rất tốn thời gian, đặc biệt khi
-    mô phỏng nhiều bước tấn công. Theo yêu cầu, trong web demo ta bỏ qua
-    metric này để tránh timeout – hàm luôn trả về 0.0.
-
-    Nếu cần phân tích sâu offline, có thể dùng lại notebook
-    `b4_airline_robustness_nhom3.py` để tính ASPL chi tiết.
-    """
+def aspl(_: nx.Graph) -> float:  # noqa: D401 – intentionally simple stub
+    """Average shortest-path length – **disabled** to keep API fast."""
     return 0.0
 
 
+def components_count(G: nx.Graph) -> int:
+    """Number of (strongly) connected components."""
+    if len(G) == 0:
+        return 0
+
+    if G.is_directed():
+        return nx.number_strongly_connected_components(G)  # type: ignore[arg-type]
+    return nx.number_connected_components(G)  # type: ignore[arg-type]
+
+
 def get_stats(G: nx.Graph) -> dict:
-    """Get all stats used by the API (không tính ASPL để tối ưu thời gian)."""
+    """Return minimal set of metrics used by API / visualisations."""
     return {
+        "directed": G.is_directed(),
         "nodes": len(G),
         "edges": G.number_of_edges(),
         "lcc_norm": lcc_size(G),
         "diameter": diameter(G),
         "aspl": aspl(G),
-        "components": nx.number_connected_components(G),
+        "components": components_count(G),
     }
-

@@ -34,19 +34,20 @@ class SimulateRequest(BaseModel):
 @router.get("/graph/stats")
 async def graph_stats():
     """Get graph statistics"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     return get_stats(app_state.graph)
 
 @router.get("/geojson/airports")
 async def get_airports(
+    mode: str = Query("undirected", description="Graph mode: undirected or directed"),
     minLat: Optional[float] = Query(None),
     maxLat: Optional[float] = Query(None),
     minLon: Optional[float] = Query(None),
     maxLon: Optional[float] = Query(None)
 ):
     """Get airports GeoJSON with optional bbox filter"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     
     bbox = None
@@ -74,7 +75,7 @@ async def get_routes(
     maxLon: Optional[float] = Query(None)
 ):
     """Get routes GeoJSON with optional bbox filter"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     
     bbox = None
@@ -107,7 +108,7 @@ async def list_airports(
 
     Có thể lọc theo bbox (region) giống các API geojson.
     """
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
 
     G = app_state.get_active_graph()
@@ -174,7 +175,7 @@ async def list_airports(
 @router.post("/simulate")
 async def simulate(req: SimulateRequest):
     """Run attack simulation"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     
     if req.strategy not in ["random", "degree", "betweenness"]:
@@ -239,7 +240,7 @@ async def restore_edge(src: int = Query(...), dst: int = Query(...)):
 @router.get("/attack/removed")
 async def get_removed():
     """Get list of removed nodes and edges"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     
     removed_nodes_info = []
@@ -284,7 +285,7 @@ async def reset_attacks():
 @router.get("/graph/stats")
 async def graph_stats():
     """Get graph statistics"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -300,7 +301,7 @@ async def get_top_hubs(
     maxLon: Optional[float] = Query(None)
 ):
     """Get top-k hubs by degree and betweenness (filtered by region)"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -376,7 +377,7 @@ async def get_redundancy_suggestions(
     maxLon: Optional[float] = Query(None)
 ):
     """Get redundancy suggestions (filtered by region)"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -445,7 +446,7 @@ async def get_attack_impact(
             print(f"Error loading pre-computed data: {e}")
     
     # Compute on-the-fly - Optimized for Southeast Asia
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -515,7 +516,7 @@ async def get_defense_impact(
     n_runs: int = Query(5, description="Number of runs for random attack averaging")
 ):
     """Get defense impact: compare attacks on original vs reinforced graph"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -592,7 +593,7 @@ async def get_top_k_impact(
         - Impact metrics after removing each hub sequentially
         - Robustness curve showing degradation
     """
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -705,7 +706,7 @@ async def get_attack_impact_custom(
     maxLon: Optional[float] = Query(None)
 ):
     """Get attack impact with custom parameters"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -769,7 +770,7 @@ async def get_defense_impact_custom(
     maxLon: Optional[float] = Query(None)
 ):
     """Get defense impact with custom parameters"""
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -862,7 +863,7 @@ async def get_defense_impact_schneider(
     - Preserves number of nodes and edges (only swaps, no add/remove)
     - Optimizes R-index (robustness index) by trying many swaps
     """
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G = app_state.get_active_graph()
     if G is None:
@@ -955,7 +956,7 @@ async def route_metrics(
     """
     import networkx as nx
 
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G_full = app_state.get_active_graph()
     if G_full is None:
@@ -1090,7 +1091,7 @@ async def route_attack_simulation(
     """
     import networkx as nx
     
-    if app_state.graph is None:
+    if app_state.graph_undirected is None:
         raise HTTPException(400, "Graph not loaded")
     G_full = app_state.get_active_graph()
     if G_full is None:
